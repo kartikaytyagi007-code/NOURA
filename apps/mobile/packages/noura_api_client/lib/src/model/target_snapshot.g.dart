@@ -13,15 +13,21 @@ abstract class _$TargetSnapshotCWProxy {
 
   TargetSnapshot policyVersion(String policyVersion);
 
+  TargetSnapshot policyStatus(TargetSnapshotPolicyStatusEnum policyStatus);
+
   TargetSnapshot method(TargetSnapshotMethodEnum method);
 
   TargetSnapshot methodReference(String? methodReference);
 
   TargetSnapshot eligibility(EligibilityStatus eligibility);
 
+  TargetSnapshot basis(TargetSnapshotBasisEnum basis);
+
   TargetSnapshot estimatedEnergyKcal(IntRange? estimatedEnergyKcal);
 
   TargetSnapshot targets(MacroTargets targets);
+
+  TargetSnapshot warnings(List<TargetSnapshotWarningsEnum> warnings);
 
   TargetSnapshot validFrom(DateTime validFrom);
 
@@ -35,11 +41,14 @@ abstract class _$TargetSnapshotCWProxy {
     String id,
     int profileRevision,
     String policyVersion,
+    TargetSnapshotPolicyStatusEnum policyStatus,
     TargetSnapshotMethodEnum method,
     String? methodReference,
     EligibilityStatus eligibility,
+    TargetSnapshotBasisEnum basis,
     IntRange? estimatedEnergyKcal,
     MacroTargets targets,
+    List<TargetSnapshotWarningsEnum> warnings,
     DateTime validFrom,
   });
 }
@@ -62,6 +71,10 @@ class _$TargetSnapshotCWProxyImpl implements _$TargetSnapshotCWProxy {
       this(policyVersion: policyVersion);
 
   @override
+  TargetSnapshot policyStatus(TargetSnapshotPolicyStatusEnum policyStatus) =>
+      this(policyStatus: policyStatus);
+
+  @override
   TargetSnapshot method(TargetSnapshotMethodEnum method) =>
       this(method: method);
 
@@ -74,11 +87,18 @@ class _$TargetSnapshotCWProxyImpl implements _$TargetSnapshotCWProxy {
       this(eligibility: eligibility);
 
   @override
+  TargetSnapshot basis(TargetSnapshotBasisEnum basis) => this(basis: basis);
+
+  @override
   TargetSnapshot estimatedEnergyKcal(IntRange? estimatedEnergyKcal) =>
       this(estimatedEnergyKcal: estimatedEnergyKcal);
 
   @override
   TargetSnapshot targets(MacroTargets targets) => this(targets: targets);
+
+  @override
+  TargetSnapshot warnings(List<TargetSnapshotWarningsEnum> warnings) =>
+      this(warnings: warnings);
 
   @override
   TargetSnapshot validFrom(DateTime validFrom) => this(validFrom: validFrom);
@@ -94,11 +114,14 @@ class _$TargetSnapshotCWProxyImpl implements _$TargetSnapshotCWProxy {
     Object? id = const $CopyWithPlaceholder(),
     Object? profileRevision = const $CopyWithPlaceholder(),
     Object? policyVersion = const $CopyWithPlaceholder(),
+    Object? policyStatus = const $CopyWithPlaceholder(),
     Object? method = const $CopyWithPlaceholder(),
     Object? methodReference = const $CopyWithPlaceholder(),
     Object? eligibility = const $CopyWithPlaceholder(),
+    Object? basis = const $CopyWithPlaceholder(),
     Object? estimatedEnergyKcal = const $CopyWithPlaceholder(),
     Object? targets = const $CopyWithPlaceholder(),
+    Object? warnings = const $CopyWithPlaceholder(),
     Object? validFrom = const $CopyWithPlaceholder(),
   }) {
     return TargetSnapshot(
@@ -114,6 +137,10 @@ class _$TargetSnapshotCWProxyImpl implements _$TargetSnapshotCWProxy {
           ? _value.policyVersion
           // ignore: cast_nullable_to_non_nullable
           : policyVersion as String,
+      policyStatus: policyStatus == const $CopyWithPlaceholder()
+          ? _value.policyStatus
+          // ignore: cast_nullable_to_non_nullable
+          : policyStatus as TargetSnapshotPolicyStatusEnum,
       method: method == const $CopyWithPlaceholder()
           ? _value.method
           // ignore: cast_nullable_to_non_nullable
@@ -126,6 +153,10 @@ class _$TargetSnapshotCWProxyImpl implements _$TargetSnapshotCWProxy {
           ? _value.eligibility
           // ignore: cast_nullable_to_non_nullable
           : eligibility as EligibilityStatus,
+      basis: basis == const $CopyWithPlaceholder()
+          ? _value.basis
+          // ignore: cast_nullable_to_non_nullable
+          : basis as TargetSnapshotBasisEnum,
       estimatedEnergyKcal: estimatedEnergyKcal == const $CopyWithPlaceholder()
           ? _value.estimatedEnergyKcal
           // ignore: cast_nullable_to_non_nullable
@@ -134,6 +165,10 @@ class _$TargetSnapshotCWProxyImpl implements _$TargetSnapshotCWProxy {
           ? _value.targets
           // ignore: cast_nullable_to_non_nullable
           : targets as MacroTargets,
+      warnings: warnings == const $CopyWithPlaceholder()
+          ? _value.warnings
+          // ignore: cast_nullable_to_non_nullable
+          : warnings as List<TargetSnapshotWarningsEnum>,
       validFrom: validFrom == const $CopyWithPlaceholder()
           ? _value.validFrom
           // ignore: cast_nullable_to_non_nullable
@@ -163,11 +198,14 @@ TargetSnapshot _$TargetSnapshotFromJson(Map<String, dynamic> json) =>
             'id',
             'profile_revision',
             'policy_version',
+            'policy_status',
             'method',
             'method_reference',
             'eligibility',
+            'basis',
             'estimated_energy_kcal',
             'targets',
+            'warnings',
             'valid_from',
           ],
         );
@@ -178,6 +216,10 @@ TargetSnapshot _$TargetSnapshotFromJson(Map<String, dynamic> json) =>
             (v) => (v as num).toInt(),
           ),
           policyVersion: $checkedConvert('policy_version', (v) => v as String),
+          policyStatus: $checkedConvert(
+            'policy_status',
+            (v) => $enumDecode(_$TargetSnapshotPolicyStatusEnumEnumMap, v),
+          ),
           method: $checkedConvert(
             'method',
             (v) => $enumDecode(_$TargetSnapshotMethodEnumEnumMap, v),
@@ -190,6 +232,10 @@ TargetSnapshot _$TargetSnapshotFromJson(Map<String, dynamic> json) =>
             'eligibility',
             (v) => $enumDecode(_$EligibilityStatusEnumMap, v),
           ),
+          basis: $checkedConvert(
+            'basis',
+            (v) => $enumDecode(_$TargetSnapshotBasisEnumEnumMap, v),
+          ),
           estimatedEnergyKcal: $checkedConvert(
             'estimated_energy_kcal',
             (v) =>
@@ -198,6 +244,12 @@ TargetSnapshot _$TargetSnapshotFromJson(Map<String, dynamic> json) =>
           targets: $checkedConvert(
             'targets',
             (v) => MacroTargets.fromJson(v as Map<String, dynamic>),
+          ),
+          warnings: $checkedConvert(
+            'warnings',
+            (v) => (v as List<dynamic>)
+                .map((e) => $enumDecode(_$TargetSnapshotWarningsEnumEnumMap, e))
+                .toList(),
           ),
           validFrom: $checkedConvert(
             'valid_from',
@@ -209,6 +261,7 @@ TargetSnapshot _$TargetSnapshotFromJson(Map<String, dynamic> json) =>
       fieldKeyMap: const {
         'profileRevision': 'profile_revision',
         'policyVersion': 'policy_version',
+        'policyStatus': 'policy_status',
         'methodReference': 'method_reference',
         'estimatedEnergyKcal': 'estimated_energy_kcal',
         'validFrom': 'valid_from',
@@ -220,13 +273,24 @@ Map<String, dynamic> _$TargetSnapshotToJson(TargetSnapshot instance) =>
       'id': instance.id,
       'profile_revision': instance.profileRevision,
       'policy_version': instance.policyVersion,
+      'policy_status':
+          _$TargetSnapshotPolicyStatusEnumEnumMap[instance.policyStatus]!,
       'method': _$TargetSnapshotMethodEnumEnumMap[instance.method]!,
       'method_reference': instance.methodReference,
       'eligibility': _$EligibilityStatusEnumMap[instance.eligibility]!,
+      'basis': _$TargetSnapshotBasisEnumEnumMap[instance.basis]!,
       'estimated_energy_kcal': instance.estimatedEnergyKcal?.toJson(),
       'targets': instance.targets.toJson(),
+      'warnings': instance.warnings
+          .map((e) => _$TargetSnapshotWarningsEnumEnumMap[e]!)
+          .toList(),
       'valid_from': instance.validFrom.toIso8601String(),
     };
+
+const _$TargetSnapshotPolicyStatusEnumEnumMap = {
+  TargetSnapshotPolicyStatusEnum.test: 'test',
+  TargetSnapshotPolicyStatusEnum.approved: 'approved',
+};
 
 const _$TargetSnapshotMethodEnumEnumMap = {
   TargetSnapshotMethodEnum.policy: 'policy',
@@ -237,4 +301,15 @@ const _$EligibilityStatusEnumMap = {
   EligibilityStatus.eligible: 'eligible',
   EligibilityStatus.trackingOnly: 'tracking_only',
   EligibilityStatus.needsReview: 'needs_review',
+};
+
+const _$TargetSnapshotBasisEnumEnumMap = {
+  TargetSnapshotBasisEnum.point: 'point',
+  TargetSnapshotBasisEnum.range: 'range',
+  TargetSnapshotBasisEnum.notCalculated: 'not_calculated',
+};
+
+const _$TargetSnapshotWarningsEnumEnumMap = {
+  TargetSnapshotWarningsEnum.energyFloorApplied: 'energy_floor_applied',
+  TargetSnapshotWarningsEnum.macroBudgetConflict: 'macro_budget_conflict',
 };

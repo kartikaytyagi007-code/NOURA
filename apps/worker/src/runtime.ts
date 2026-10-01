@@ -8,10 +8,12 @@ import {
   type QueueName,
   type QueuePayloads,
 } from '@noura/domain';
+import pg from 'pg';
 import { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { WorkerConfig } from './config.js';
 import { handleSystemPing } from './handlers/system-ping.js';
+import { relayGenerationRequests, startRelayLoop } from './relay.js';
 
 export interface WorkerRuntime {
   boss: PgBoss;
@@ -74,6 +76,19 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
   );
   ready = true;
 
+  // The relay uses its own small pool so it can assume the restricted noura_worker role.
+  const relayPool = new pg.Pool({
+    connectionString: config.databaseUrl,
+    max: 2,
+    application_name: 'noura-worker-relay',
+  });
+  relayPool.on('error', (error) => log.error({ err: error }, 'relay pool error'));
+  const relay = startRelayLoop(
+    () => relayGenerationRequests(relayPool, boss, log),
+    config.relayIntervalMs,
+    log,
+  );
+
   const healthServer = createServer((req, res) => {
     const respond = (status: number, body: object) => {
       res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -121,6 +136,8 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
     healthPort: () => (healthServer.address() as AddressInfo).port,
     stop: async () => {
       ready = false;
+      await relay.stop();
+      await relayPool.end();
       await new Promise<void>((resolve) => healthServer.close(() => resolve()));
       // Graceful: let in-flight handlers finish; unfinished jobs are retried (at-least-once).
       await boss.stop({ graceful: true, timeout: 20_000 });

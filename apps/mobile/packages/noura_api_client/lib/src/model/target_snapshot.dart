@@ -28,15 +28,21 @@ class TargetSnapshot {
 
     required this.policyVersion,
 
+    required this.policyStatus,
+
     required this.method,
 
     required this.methodReference,
 
     required this.eligibility,
 
+    required this.basis,
+
     required this.estimatedEnergyKcal,
 
     required this.targets,
+
+    required this.warnings,
 
     required this.validFrom,
   });
@@ -51,6 +57,10 @@ class TargetSnapshot {
   @JsonKey(name: r'policy_version', required: true, includeIfNull: false)
   final String policyVersion;
 
+  /// `test` means a development placeholder policy: the numbers are not reviewed and must never be presented as medical advice. Only `approved` policies may drive production planning.
+  @JsonKey(name: r'policy_status', required: true, includeIfNull: false)
+  final TargetSnapshotPolicyStatusEnum policyStatus;
+
   @JsonKey(name: r'method', required: true, includeIfNull: false)
   final TargetSnapshotMethodEnum method;
 
@@ -60,11 +70,18 @@ class TargetSnapshot {
   @JsonKey(name: r'eligibility', required: true, includeIfNull: false)
   final EligibilityStatus eligibility;
 
+  /// point: one energy target. range: the calculation sex was declined, so only an energy range is offered and energy-dependent targets are null. not_calculated: eligibility excludes automated planning, so no targets exist.
+  @JsonKey(name: r'basis', required: true, includeIfNull: false)
+  final TargetSnapshotBasisEnum basis;
+
   @JsonKey(name: r'estimated_energy_kcal', required: true, includeIfNull: true)
   final IntRange? estimatedEnergyKcal;
 
   @JsonKey(name: r'targets', required: true, includeIfNull: false)
   final MacroTargets targets;
+
+  @JsonKey(name: r'warnings', required: true, includeIfNull: false)
+  final List<TargetSnapshotWarningsEnum> warnings;
 
   @JsonKey(name: r'valid_from', required: true, includeIfNull: false)
   final DateTime validFrom;
@@ -78,22 +95,28 @@ class TargetSnapshot {
                 id,
                 profileRevision,
                 policyVersion,
+                policyStatus,
                 method,
                 methodReference,
                 eligibility,
+                basis,
                 estimatedEnergyKcal,
                 targets,
+                warnings,
                 validFrom,
               ],
               [
                 other.id,
                 other.profileRevision,
                 other.policyVersion,
+                other.policyStatus,
                 other.method,
                 other.methodReference,
                 other.eligibility,
+                other.basis,
                 other.estimatedEnergyKcal,
                 other.targets,
+                other.warnings,
                 other.validFrom,
               ],
             );
@@ -106,11 +129,14 @@ class TargetSnapshot {
         id,
         profileRevision,
         policyVersion,
+        policyStatus,
         method,
         methodReference,
         eligibility,
+        basis,
         estimatedEnergyKcal,
         targets,
+        warnings,
         validFrom,
       ]);
 
@@ -125,6 +151,21 @@ class TargetSnapshot {
   }
 }
 
+/// `test` means a development placeholder policy: the numbers are not reviewed and must never be presented as medical advice. Only `approved` policies may drive production planning.
+enum TargetSnapshotPolicyStatusEnum {
+  @JsonValue(r'test')
+  test(r'test'),
+  @JsonValue(r'approved')
+  approved(r'approved');
+
+  const TargetSnapshotPolicyStatusEnum(this.value);
+
+  final String value;
+
+  @override
+  String toString() => value;
+}
+
 enum TargetSnapshotMethodEnum {
   @JsonValue(r'policy')
   policy(r'policy'),
@@ -132,6 +173,37 @@ enum TargetSnapshotMethodEnum {
   userOverride(r'user_override');
 
   const TargetSnapshotMethodEnum(this.value);
+
+  final String value;
+
+  @override
+  String toString() => value;
+}
+
+/// point: one energy target. range: the calculation sex was declined, so only an energy range is offered and energy-dependent targets are null. not_calculated: eligibility excludes automated planning, so no targets exist.
+enum TargetSnapshotBasisEnum {
+  @JsonValue(r'point')
+  point(r'point'),
+  @JsonValue(r'range')
+  range(r'range'),
+  @JsonValue(r'not_calculated')
+  notCalculated(r'not_calculated');
+
+  const TargetSnapshotBasisEnum(this.value);
+
+  final String value;
+
+  @override
+  String toString() => value;
+}
+
+enum TargetSnapshotWarningsEnum {
+  @JsonValue(r'energy_floor_applied')
+  energyFloorApplied(r'energy_floor_applied'),
+  @JsonValue(r'macro_budget_conflict')
+  macroBudgetConflict(r'macro_budget_conflict');
+
+  const TargetSnapshotWarningsEnum(this.value);
 
   final String value;
 

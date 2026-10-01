@@ -213,6 +213,9 @@ describe('GET /v1/me', () => {
       preferences: null,
       training_preferences: null,
       eligibility_status: null,
+      goal: null,
+      screening: null,
+      planning: null,
     });
     expect(body.data.profile.revision).toBe(1);
 
@@ -242,9 +245,9 @@ describe('GET /v1/me', () => {
   it('returns completed onboarding state written by the server', async () => {
     const sub = await createAuthUser();
     await admin.query(
-      `insert into app.profiles (user_id, display_name, age_years, height_cm, activity_band, onboarding_status,
-                                 eligibility_status, timezone)
-       values ($1, 'Asha', 30, 162.5, 'moderate', 'completed', 'eligible', 'Asia/Kolkata')`,
+      `insert into app.profiles (user_id, display_name, age_years, height_cm, weight_kg, activity_band,
+                                 onboarding_status, eligibility_status, screening_answered_at, timezone)
+       values ($1, 'Asha', 30, 162.5, 58, 'moderate', 'completed', 'eligible', now(), 'Asia/Kolkata')`,
       [sub],
     );
     const token = await signToken(keys, { sub });

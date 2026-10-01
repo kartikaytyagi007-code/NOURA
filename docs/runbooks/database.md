@@ -38,3 +38,22 @@ The API's readiness check reports `role: false` if the connection user cannot as
   `pnpm --filter @noura/worker run queue:migrate` (or `node apps/worker/dist/queue-migrate.js` in the
   image). Keep `PGBOSS_MIGRATE=false` in deployed workers.
 - Failed jobs that exhaust their retries go to `system.dead-letter`.
+
+## Generation request relay (M2)
+
+- Onboarding completion records a durable `generation_requests` row; the worker relays it to the
+  queue (D-017). The worker's login role must be granted `noura_worker` (above), because the relay
+  assumes that role without a user context.
+- Requests waiting to be relayed: `select count(*) from app.generation_requests where status = 'queued' and queue_job_id is null;`
+  A count that keeps growing means the worker is down or cannot reach the queue. Nothing is lost:
+  the requests are relayed when it recovers.
+- M3 adds the consumer. Until then relayed jobs wait in `diet-plan.generate`.
+
+## Planning policy (M2)
+
+- Automated planning needs an approved policy file (`PLANNING_POLICY_FILE`, D-018). Staging and
+  production refuse a policy whose status is `test`. Without a file the API starts and reports
+  `unavailable_policy` to eligible users, who keep every tracking feature.
+- The file holds clinical parameters and their approval record. Treat it as reviewed configuration:
+  keep it in the secret or configuration store, change it only with sign-off, and bump its `version`
+  (snapshots record the version they used).

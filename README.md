@@ -4,8 +4,8 @@ Indian-first nutrition and fitness coach. V1 is specified in [`docs/blueprint.md
 progress is tracked in [`docs/milestones.md`](docs/milestones.md) and decisions in
 [`docs/decisions.md`](docs/decisions.md).
 
-**Current state: M1 (foundation) only.** Auth, the app shell, API/worker skeletons, the database
-schema and contracts exist. Product features (onboarding, plans, scanning, coach, billing…) are
+**Current state: M2 (profile and onboarding) on top of the M1 foundation.** Auth, the app shell, resumable onboarding, profile editing, eligibility, the target-policy framework, API/worker, the database
+schema and contracts exist. Later features (plans, scanning, coach, billing…) are
 labelled placeholders until their milestones.
 
 ```text

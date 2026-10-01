@@ -56,3 +56,34 @@ export async function withUserTransaction<T>(
     client.release(broken);
   }
 }
+
+/**
+ * Runs fn in a transaction as a restricted server role WITHOUT a user context. Only for narrow,
+ * system-level work that is not owned by one user (for example relaying queued generation requests).
+ * Row access still comes only from RLS policies written for that role; with no user context the
+ * owner policies match nothing.
+ */
+export async function withSystemTransaction<T>(
+  pool: PoolLike,
+  role: ServerRole,
+  fn: (client: Queryable) => Promise<T>,
+): Promise<T> {
+  if (!SERVER_ROLES.includes(role)) throw new Error(`Unsupported server role: ${String(role)}`);
+  const client = await pool.connect();
+  let broken = false;
+  try {
+    await client.query('begin');
+    await client.query(`set local role ${role}`);
+    await client.query("select set_config('noura.user_id', '', true)");
+    const result = await fn(client);
+    await client.query('commit');
+    return result;
+  } catch (error) {
+    await client.query('rollback').catch(() => {
+      broken = true;
+    });
+    throw error;
+  } finally {
+    client.release(broken);
+  }
+}

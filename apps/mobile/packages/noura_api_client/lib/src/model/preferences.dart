@@ -44,15 +44,18 @@ class Preferences {
   @JsonKey(name: r'diet_type', required: true, includeIfNull: true)
   final DietType? dietType;
 
+  /// Allergy tags (AllergyTag). Clients ignore values they do not know.
   @JsonKey(name: r'allergy_ids', required: true, includeIfNull: false)
   final List<String> allergyIds;
 
+  /// Food exclusion tags (ExclusionTag). Clients ignore values they do not know.
   @JsonKey(name: r'exclusion_ids', required: true, includeIfNull: false)
   final List<String> exclusionIds;
 
   @JsonKey(name: r'dislikes', required: true, includeIfNull: false)
   final List<String> dislikes;
 
+  /// Cuisine tags (CuisineTag). Clients ignore values they do not know.
   @JsonKey(name: r'cuisines', required: true, includeIfNull: false)
   final List<String> cuisines;
 

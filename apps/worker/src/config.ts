@@ -22,6 +22,8 @@ const schema = z
     PGBOSS_MIGRATE: boolString.optional(),
     WORKER_HEALTH_HOST: z.string().default('0.0.0.0'),
     WORKER_HEALTH_PORT: z.coerce.number().int().min(0).max(65535).default(8081),
+    // How often undispatched generation requests are handed to the queue (docs/decisions.md D-017).
+    WORKER_RELAY_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(2_000),
     WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(2),
     AI_PROVIDER: z.enum(['mock', 'gemini']).optional(),
     AI_API_KEY: z.string().min(1).optional(),
@@ -54,6 +56,7 @@ export interface WorkerConfig {
   migrate: boolean;
   health: { host: string; port: number };
   concurrency: number;
+  relayIntervalMs: number;
   ai: { provider: 'mock' | 'gemini'; apiKey?: string | undefined; modelId?: string | undefined };
 }
 
@@ -83,6 +86,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     migrate: e.PGBOSS_MIGRATE ?? !deployed,
     health: { host: e.WORKER_HEALTH_HOST, port: e.WORKER_HEALTH_PORT },
     concurrency: e.WORKER_CONCURRENCY,
+    relayIntervalMs: e.WORKER_RELAY_INTERVAL_MS,
     ai: { provider: e.AI_PROVIDER ?? 'mock', apiKey: e.AI_API_KEY, modelId: e.AI_MODEL_ID },
   };
 }

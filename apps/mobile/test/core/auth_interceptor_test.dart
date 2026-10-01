@@ -7,6 +7,7 @@ import 'package:noura/core/api/api_client.dart';
 import 'package:noura/core/api/api_failure.dart';
 import 'package:noura/core/auth/auth_state.dart';
 import 'package:noura/core/auth/mock_auth_repository.dart';
+import 'package:noura/core/profile/profile_repository.dart';
 import 'package:noura/core/profile/session_profile.dart';
 
 /// Serves scripted responses and records the requests the client sent.
@@ -86,15 +87,19 @@ Map<String, Object?> _me(String status) => {
       'age_years': null,
       'calculation_sex': null,
       'height_cm': null,
+      'weight_kg': null,
       'activity_band': null,
       'timezone': 'UTC',
       'unit_system': 'metric',
       'revision': 1,
     },
+    'goal': null,
     'preferences': null,
     'training_preferences': null,
     'eligibility_status': null,
+    'screening': null,
     'onboarding': {'status': status, 'step': null},
+    'planning': null,
   },
   'meta': {'request_id': 'server'},
 };
@@ -105,8 +110,8 @@ void main() {
     final adapter = ScriptedAdapter([(200, _me('completed'))]);
     final profile = await ApiProfileRepository(
       buildApiClient(buildDio(baseUrl: 'http://api.test', auth: auth, adapter: adapter)),
-    ).fetchSessionProfile();
-    expect(profile.onboarding, OnboardingState.completed);
+    ).fetchMe();
+    expect(SessionProfile.fromMe(profile).onboarding, OnboardingState.completed);
     final sent = adapter.requests.single;
     expect(sent.headers['authorization'], 'Bearer token-1');
     expect(sent.headers['x-request-id'], matches(RegExp(r'^[0-9a-f]{32}$')));
@@ -120,8 +125,8 @@ void main() {
     final adapter = ScriptedAdapter([_unauthorized, (200, _me('not_started'))]);
     final profile = await ApiProfileRepository(
       buildApiClient(buildDio(baseUrl: 'http://api.test', auth: auth, adapter: adapter)),
-    ).fetchSessionProfile();
-    expect(profile.onboarding, OnboardingState.notStarted);
+    ).fetchMe();
+    expect(SessionProfile.fromMe(profile).onboarding, OnboardingState.notStarted);
     expect(adapter.authHeaders, ['Bearer token-1', 'Bearer token-2']);
     expect(auth.signedOut, isFalse);
   });
@@ -133,7 +138,7 @@ void main() {
       buildApiClient(buildDio(baseUrl: 'http://api.test', auth: auth, adapter: adapter)),
     );
     await expectLater(
-      repo.fetchSessionProfile(),
+      repo.fetchMe(),
       throwsA(isA<ApiFailure>().having((f) => f.kind, 'kind', ApiFailureKind.unauthenticated)),
     );
     expect(auth.signedOutWith, SignOutReason.sessionExpired);
@@ -146,7 +151,7 @@ void main() {
     final repo = ApiProfileRepository(
       buildApiClient(buildDio(baseUrl: 'http://api.test', auth: auth, adapter: adapter)),
     );
-    await expectLater(repo.fetchSessionProfile(), throwsA(isA<ApiFailure>()));
+    await expectLater(repo.fetchMe(), throwsA(isA<ApiFailure>()));
     expect(adapter.requests, hasLength(2));
     expect(auth.signedOutWith, SignOutReason.sessionExpired);
   });
@@ -157,7 +162,7 @@ void main() {
     final repo = ApiProfileRepository(
       buildApiClient(buildDio(baseUrl: 'http://api.test', auth: auth, adapter: adapter)),
     );
-    await Future.wait([repo.fetchSessionProfile(), repo.fetchSessionProfile()]);
+    await Future.wait([repo.fetchMe(), repo.fetchMe()]);
     expect(auth.refreshes, 1);
     expect(adapter.authHeaders, ['Bearer token-1', 'Bearer token-1', 'Bearer token-2', 'Bearer token-2']);
   });

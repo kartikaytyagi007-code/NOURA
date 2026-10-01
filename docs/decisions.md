@@ -244,3 +244,171 @@ Dockerfile was written but not built (no Docker daemon).
   generated). The ID is echoed in the response header and logged as `request_id`.
 - Authorization headers and cookies are redacted from logs. Unexpected errors log details
   server-side and return only a generic message.
+
+## D-017 · Generation requests reach the queue through a worker relay (M2)
+
+**Decision.**
+
+- Completing onboarding writes a durable `generation_requests` row (type `diet_plan`, status
+  `queued`) in the same transaction as the profile, consents and target snapshot. The API never
+  talks to the queue and holds no queue privileges.
+- The worker relays requests that are still `queued` with no `queue_job_id` to pg-boss
+  (`diet-plan.generate`) and records `queue_name` and `queue_job_id`.
+  - The job id is the request id. If the worker dies between sending and recording, the next run
+    re-sends (a no-op for an existing id) and records the dispatch. Delivery is at-least-once, so
+    handlers must be idempotent on the request id.
+  - The payload is ids only (`generation_request_id`, `user_id`). A handler reloads everything under
+    the user's own context.
+  - Rows are claimed with `FOR UPDATE SKIP LOCKED`, so overlapping relays never double-send.
+  - Interval: `WORKER_RELAY_INTERVAL_MS` (default 2000).
+- A queue outage or a failing generation cannot lose profile data: the inputs were committed with the
+  request. The M1 note "the API does not produce jobs" (D-009) now means "the API records durable
+  requests; the worker produces queue jobs".
+
+**Database.**
+
+- The `noura_worker` role gets two narrow cross-user policies on `generation_requests`: it may see
+  rows that are still `queued`, and update only an undispatched row into a dispatched one.
+- A trigger limits what the worker may change without a user context to `queue_name` and
+  `queue_job_id` (policies cannot restrict columns). PostgreSQL also checks the SELECT policy against
+  an updated row, so the select policy must keep matching after dispatch (found by the DB tests).
+- Per-user job handling with a user context is unchanged.
+
+**Limits.** No handler consumes `diet-plan.generate` until M3, so relayed jobs wait in the queue. M3
+registers the handler and decides what to do with requests queued before it existed.
+
+## D-018 · Versioned, deterministic target-policy framework (M2)
+
+**Decision.**
+
+- The targets engine (`packages/domain/src/nutrition`) is a pure function of a profile and a policy.
+  The same input and policy always give the same output. Every number lives in the policy: energy
+  equation coefficients (Mifflin-St Jeor form), activity factors, goal adjustments, protein per kg,
+  fat share, fibre per 1000 kcal and energy per gram.
+- A policy has an id, a version, a method reference and a status: `test` or `approved`. An `approved`
+  policy must record its approval (reviewer, date, reference). The schema is strict and zod-validated.
+- The repository ships only `TEST_TARGET_POLICY`: development placeholders, not reviewed values and
+  not medical advice. The blueprint sets no calorie floor, so `minimum_energy_kcal` is null in the test
+  policy and is an option for the reviewer.
+- Gate: development and test may run the test policy. Staging and production plan only with an
+  approved policy. API startup refuses a `test` policy file in those environments (the error names the
+  variable, never values). With no policy configured, planning is unavailable (fails closed) and the
+  rest of the product works.
+- Configuration: `PLANNING_POLICY_FILE` points at a JSON policy. Development and test default to the
+  test policy.
+- If the calculation sex is declined, the energy is an estimated range (the lowest and highest of the
+  two equation variants) and the energy-dependent targets are null. Nothing is inferred about sex.
+- Snapshots record `policy_version` and `policy_status`. A snapshot with no numbers
+  (`basis: not_calculated`) is written for users who are not eligible or when the gate is closed. It is
+  labelled `test` so it can never read as reviewed.
+- The app does not show calorie or nutrient targets in M2.
+
+**Release gate (open).** A reviewer must supply and approve a real policy and its method reference
+before staging or production can plan. This is a clinical and product decision, not an engineering one.
+
+## D-019 · Eligibility rules v1 (M2)
+
+**Decision.** `packages/domain/src/eligibility` is a pure function from age and three screening answers
+to `eligible`, `tracking_only` or `needs_review`, with a rules version (`eligibility-v1`).
+
+- Under the minimum adult age, or any "yes" answer: `tracking_only`.
+- Otherwise any "prefer not to say": `needs_review`. Eligibility cannot be confirmed, so planning stays
+  off and the user can update the answers later.
+- Otherwise `eligible`.
+- Questions: pregnancy or breastfeeding, an eating-disorder concern, a condition that needs a
+  specific medical diet. Only the answers are stored (`screening_flags`, with `screening_answered_at`).
+  No free text is collected.
+- Eligibility is recomputed on every profile save. After onboarding, an edit that makes the user
+  ineligible switches planning off and records a `not_calculated` snapshot.
+- `tracking_only` and `needs_review` users complete onboarding and keep every tracking feature.
+
+**Provisional.** The minimum adult age (18) is jurisdiction-specific, and the question wording and the
+explanatory copy need legal and clinical review. They are product-scope definitions, not clinical
+thresholds. They are release-gate items.
+
+## D-020 · Provisional vocabularies, units and timezone list (M2, provisional)
+
+- **Tag sets** for allergies, excluded foods, cuisines, equipment and limitations are OpenAPI input
+  enums, validated by the API. They are provisional, not a medical allergy list, and are revised with
+  the food and exercise catalogs (M5 to M7). Responses use plain strings and the app drops values it
+  does not know, so a newer server vocabulary cannot break an older app.
+- **Weight** is stored on the profile (`weight_kg`, 20 to 400, a plausibility bound only). D-013 said
+  weight lives only in `weight_logs`; M2 needs a starting weight for targets, and M8 may update it.
+- **Units.** The server stores and validates metric only. Imperial (lb, ft and in) is a display and
+  input convenience, converted in the app with exact definitions. Validation messages use the user's
+  units.
+- **Calculation sex input** is `female`, `male` or `declined`. JSON null cannot be sent by the
+  generated client, and an explicit value lets a user clear an earlier answer. The profile still
+  reads null for a declined answer.
+- **Timezones** are chosen from a curated list in the app (no timezone database dependency). The
+  server accepts any valid IANA name. The app suggests a timezone only when the device offset maps to
+  exactly one zone without daylight saving (+05:30 gives Asia/Kolkata).
+- **YAML pitfall.** Unquoted `yes` and `no` in `openapi.yaml` parse as booleans in the Dart generator.
+  The screening enum quotes them.
+
+## D-021 · Consent catalogue and recording (M2)
+
+- Completing onboarding requires consent to `terms`, `privacy` and `health_data_processing`. The
+  optional `ai_meal_processing` and `progress_photo_storage` consents are asked where they are used
+  (M4, M8).
+- The server publishes versions in `packages/domain/src/consent`. Every published version is the
+  draft placeholder `v0-draft` until counsel supplies the documents. The server rejects unknown
+  versions, so a client can never record consent to text that does not exist.
+- A partial unique index allows one active record per user, type and version. Recording is part of
+  the completion transaction.
+- The review screen says the wording is a draft placeholder.
+
+**Release gate (open).** Final legal documents and their version identifiers.
+
+## D-022 · Revisions, idempotency and transactions for profile writes (M2)
+
+- **Independent revisions.** The profile, preferences and training preferences each have their own
+  revision. `expected_revision` must match or the write returns `REVISION_CONFLICT` (409). For the two
+  preference objects `0` means "none yet" and the first save creates revision 1. Every profile save
+  increments by one. A profile save that includes `onboarding_step` is refused once onboarding is
+  complete.
+- **Idempotency.** Every write requires an `Idempotency-Key`. The key, the route and a hash of the
+  body are stored with the response in `app.idempotency_records` (24 hours), in the same transaction
+  as the work. A replay returns the stored response and writes nothing. The same key with a different
+  body is rejected. A concurrent duplicate waits on the unique index and then replays. Failed requests
+  roll back with their record, so they are retried normally.
+- **Completion** locks the profile row (`FOR UPDATE`) and runs in one transaction. A second completion
+  returns `CONSTRAINT_CONFLICT` ("already complete"), and a stale revision returns the conflict. A
+  rejected completion writes nothing, including the lazily created profile row. Duplicate submits
+  therefore create exactly one generation request (tested with concurrent same-key requests, a new
+  key and a stale revision).
+- Completion, preference writes and goal changes always filter on the verified user id through
+  `withUserTransaction`; the API accepts no `user_id` or premium flag from a client.
+
+## D-023 · Flutter onboarding and Settings editing (M2)
+
+- The Stitch export contains no onboarding or profile screens, so M2 uses the existing component
+  system (D-014). Replacing the visuals later does not touch routing or state.
+- Six steps: About you, Your goal, Food preferences, Training, Eligibility, Review and finish.
+  Each step saves to the server before moving on. The server stores the furthest step reached
+  (`onboarding.step`), and the app resumes there after a restart. Going back never discards saved data
+  and never moves the stored step backwards.
+- Consent is on the review step, because consents are recorded by the completion call itself.
+- Forms are shared between onboarding and Settings (Profile, Goal, Food preferences, Training,
+  Eligibility). Settings saves do not touch the onboarding step.
+- `MeController` is the only writer of profile state. A write never puts the provider back into
+  loading (that would send the router to the splash screen). Failed saves keep the inputs on screen:
+  offline shows a retry message, a conflict offers "Load latest", and validation lists the server's
+  messages.
+- Completing uses one idempotency key per consent selection and reuses it on retry.
+- Home shows a status card derived from the server's planning state. It makes no plan or nutrition
+  claim, and shows that plans are unavailable for tracking-only, needs-review or no-policy states.
+- The development mock profile source keeps answers in memory with the server's revision rules. It
+  computes no eligibility, targets or plans.
+
+## D-024 · Notes for M3 (not started)
+
+- Plan staleness: compare a plan's `profile_revision` with the current profile revision. The preference
+  revisions are separate, so staleness should consider all three.
+- With `basis: range` (sex declined) the energy target is null. Plan generation must work against the
+  range or ask for manual targets.
+- Register the `diet-plan.generate` handler. It must be idempotent on `generation_request_id` and
+  reload the profile, preferences and snapshot under the user's context. Decide how to treat requests
+  relayed before a handler existed.
+- The target snapshot refreshes when target-relevant fields change after onboarding, but nothing
+  regenerates plans automatically.

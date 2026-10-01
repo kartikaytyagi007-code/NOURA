@@ -8,7 +8,7 @@ import 'core/auth/auth_repository.dart';
 import 'core/auth/mock_auth_repository.dart';
 import 'core/auth/supabase_auth_repository.dart';
 import 'core/config/app_config.dart';
-import 'core/profile/session_profile.dart';
+import 'core/profile/profile_repository.dart';
 import 'core/providers.dart';
 
 Future<void> main() async {

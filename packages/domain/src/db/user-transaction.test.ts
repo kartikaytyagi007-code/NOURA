@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isUuid, withUserTransaction, type PoolClientLike } from './user-transaction.js';
+import {
+  isUuid,
+  withSystemTransaction,
+  withUserTransaction,
+  type PoolClientLike,
+} from './user-transaction.js';
 
 function fakePool(failOn?: string) {
   const statements: string[] = [];
@@ -54,5 +59,30 @@ describe('withUserTransaction', () => {
   it('validates UUIDs', () => {
     expect(isUuid(USER)).toBe(true);
     expect(isUuid('not-a-uuid')).toBe(false);
+  });
+});
+
+describe('withSystemTransaction', () => {
+  it('assumes the role with the user context explicitly cleared', async () => {
+    const { pool, statements } = fakePool();
+    await withSystemTransaction(pool, 'noura_worker', (c) => c.query('select 1'));
+    expect(statements).toEqual([
+      'begin',
+      'set local role noura_worker',
+      "select set_config('noura.user_id', '', true)",
+      'select 1',
+      'commit',
+    ]);
+  });
+
+  it('rolls back on failure and rejects unknown roles', async () => {
+    const { pool, statements } = fakePool('select 1');
+    await expect(
+      withSystemTransaction(pool, 'noura_worker', (c) => c.query('select 1')),
+    ).rejects.toThrow('boom');
+    expect(statements.at(-1)).toBe('rollback');
+    await expect(withSystemTransaction(pool, 'postgres' as never, async () => 1)).rejects.toThrow(
+      /Unsupported/,
+    );
   });
 });

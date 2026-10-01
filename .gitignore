@@ -1,0 +1,31 @@
+# Secrets: never commit real environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+*.jks
+*.keystore
+key.properties
+google-services.json
+GoogleService-Info.plist
+supabase/signing_keys.json
+
+# Node
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Supabase CLI local state
+supabase/.branches
+supabase/.temp
+
+# Tooling caches
+.openapi-generator-cache/
+packages/contracts/.tmp/
+.DS_Store
+
+# Flutter build-time configuration (only *.example.json templates are committed)
+apps/mobile/env/*.json
+!apps/mobile/env/*.example.json

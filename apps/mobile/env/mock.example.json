@@ -1,0 +1,5 @@
+{
+  "NOURA_ENV": "development",
+  "NOURA_USE_MOCKS": true,
+  "NOURA_DEV_BYPASS_ONBOARDING": false
+}

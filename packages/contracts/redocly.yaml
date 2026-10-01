@@ -1,0 +1,12 @@
+extends:
+  - recommended
+rules:
+  # Health endpoints intentionally have no 4xx response.
+  operation-4xx-response: off
+  # Planned operations share envelope schemas; examples are provided where they clarify contracts.
+  no-invalid-media-type-examples: error
+  security-defined: error
+  operation-operationId-unique: error
+  no-unused-components: warn
+  # The local development server URL is intentional.
+  no-server-example.com: off

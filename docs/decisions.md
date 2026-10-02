@@ -827,3 +827,144 @@ replace the test fixture, and the gap thresholds (`GAP_THRESHOLD_FRACTION = 0.8`
 `MIN_USABLE_DAYS_FOR_WEEKLY_GAPS = 3`) are engineering placeholders, not reviewed nutrition guidance,
 and should be confirmed by a reviewer before this is presented as anything more than an explainable
 heuristic.
+
+## D-029 · Synthetic test-fixture exercise catalog, the workout-plan generation algorithm, and session-logging schema reuse (M7)
+
+**Scope.** Personalized weekly workout plans and workout session logging (blueprint §11), built the
+same way as M3's diet-plan generation (D-025): a deterministic, seed-free backend algorithm over a
+verified exercise catalog, with the same async `generation_requests`/queue/worker pattern and the
+same catalog-honesty gate — no AI model invents exercise names, prescriptions or substitution safety.
+
+**Exercise-catalog test-fixture seed, mirroring D-025 exactly.** No licensed exercise dataset is
+available in this environment (`data/exercises` has no content beyond its README placeholder).
+`supabase/migrations/20261001001200_m7_exercise_test_fixture.sql` seeds 29 exercises, all
+`quality_flag = 'test_fixture'`, spanning squat, hinge, horizontal/vertical push, horizontal/vertical
+pull, core and carry/conditioning movement patterns, across beginner/intermediate/advanced levels and
+bodyweight/dumbbell/barbell/bench/pull-up-bar/kettlebell/resistance-band/gym-machine/bike equipment,
+plus 19 symmetric `exercise_substitutions` relationships. The seed's own comment states plainly that
+these are synthetic development placeholders, not a reviewed exercise-science source.
+
+**Catalog gate reused, not duplicated.** `packages/domain/src/catalog/gate.ts`'s `catalogGate()`
+(D-025) is generalized to take any `{ quality_flag }` item rather than only `CatalogRecipe`, so the
+exact same fail-closed rule — staging/production refuse to generate from a catalog with no
+`verified`/`reviewed` entries — now also governs workout-plan generation
+(`apps/worker/src/handlers/workout-plan-generate.ts`), with no separate gate implementation to drift
+out of sync.
+
+**Workout-plan generation algorithm.** `packages/domain/src/workouts/generate.ts`'s
+`generateWorkoutPlan` is the structural counterpart to M3's `generatePlan`: pure, deterministic and
+seed-free, so the same eligible-exercise pool, weekday selection and session duration always produce
+the same week. It schedules one session per selected weekday (ISO 1–7, the earliest `days_per_week` of
+the user's declared `weekdays`), sizes each session's exercise count from `duration_minutes` (one
+exercise per ~8 minutes, clamped to 3–6), and rotates through each available movement pattern's
+eligible-exercise pool deterministically by session index so the week varies without randomness. Set/
+rep/rest prescriptions are assigned by the exercise's own level (`prescriptionForLevel`) — fixed,
+documented placeholder norms (e.g. beginner: 3×10-12, 60s rest), explicitly noted in code as
+engineering defaults, not reviewed exercise-science guidance, exactly like D-025's diet thresholds.
+
+**Equipment/location/limitation/experience eligibility (`packages/domain/src/workouts/eligibility.ts`),
+the exercise-catalog counterpart to `catalog/eligibility.ts`'s diet rules.** An exercise with no
+equipment tags is bodyweight and always eligible. A `gym` or `both` training location is treated as
+full gym equipment access; a `home`-only location restricts eligibility to the exercise's equipment
+tags all being present in the user's declared `equipment_ids` — this is what makes a barbell exercise
+correctly unavailable to a home-only user with no barbell, and correctly available once they declare
+one, or once their location includes gym access. Any overlap between an exercise's
+`contraindication_tags` and the user's recorded `limitation_tags` excludes it outright (never a
+softened "lower effort" variant — the exercise simply does not appear). Experience is a ceiling, not a
+floor (`LEVEL_ORDER`): a beginner sees only beginner-level exercises; an advanced user sees the full
+beginner-through-advanced progression. All four rules combine with AND, mirroring D-025's "every rule
+re-derived from the catalog's own tags" convention so a stale cache can never relax a safety
+constraint.
+
+**Substitutions (`packages/domain/src/workouts/substitutions.ts`) are catalog-declared only.**
+`substitutionsFor` reads `app.exercise_substitutions` relationships for the requested exercise, then
+filters the candidates through the exact same `filterEligibleExercises` eligibility rules — so a
+substitution offered to the user is always both a real catalog relationship and something they can
+currently do, never an invented "similar" exercise and never one their equipment/limitations rule out.
+
+**Infeasibility handling, mirroring D-025 exactly.** `generateWorkoutPlan` returns
+`{ ok: false, reason: 'no_eligible_exercises' }` when the user's equipment/location/limitations/
+experience combination leaves nothing eligible at all, and
+`{ ok: false, reason: 'insufficient_weekdays' }` when fewer weekdays are selected than
+`days_per_week` requires (defensive: the API/profile layer already validates this, per
+`packages/domain/src/profile/validation.ts`'s `validateTraining`). The worker handler
+(`handleWorkoutPlanGenerate`) maps both, plus missing/incomplete training preferences and the catalog
+gate's refusal, onto an honest `safe_error_code`/`safe_error_message` on the `generation_requests` row
+— never a degenerate or silently-wrong plan — surfaced through the existing `GET /v1/jobs/{id}`
+endpoint exactly as M3's diet-plan infeasibility is.
+
+**`request_type` decision: always `workout_plan`, never `plan_regeneration`.** The
+`generation_requests.request_type` check constraint already lists `plan_regeneration` as a shared
+value (added in M1, read as "M7, not relevant now" at the time), but
+`packages/domain/src/jobs/queues.ts`'s `GENERATION_REQUEST_QUEUES` can only map each request type to
+one queue, and `plan_regeneration` already maps to the diet-plan queue (D-025). Rather than overload
+that mapping or special-case the relay, M7's `requestWorkoutPlanGeneration`
+(`apps/api/src/modules/workouts/service.ts`) always records `request_type = 'workout_plan'`, for both
+the first plan and every later regeneration; `GENERATION_REQUEST_QUEUES.workout_plan` points at the
+new `workout-plan.generate` queue. The existing one-active-job-per-`(user_id, request_type)` partial
+unique index already covers `workout_plan`, so repeated generation requests are still deduplicated
+exactly like diet plans.
+
+**Session-logging schema: M1's `workout_logs`/`workout_set_logs` already cover it; no new migration
+needed.** Before writing any schema, the M1 `supabase/migrations/20261001000400_plans.sql` and
+`20261001000500_media_scans_logs.sql` were read in full per the ticket's instruction. They show the
+"planned" and "logged" layers were already designed as two separate table families:
+`workout_plans`/`workout_plan_sessions`/`workout_plan_exercises` hold the generated prescription
+(sets/reps/rest/exercise, never what actually happened), while `workout_logs`
+(`client_id`-deduplicated, `status: in_progress|completed|skipped|abandoned`, `started_at`/
+`completed_at`, `revision`) and `workout_set_logs` (`exercise_id`, `set_ordinal`, `reps`, `load_kg`,
+`skipped`, unique per `(workout_log_id, exercise_id, set_ordinal)`) already exist as exactly the
+"actually happened" layer the M7 ticket asks for. Both were present since M1 but unused until this
+milestone. This is the only migration this milestone needed beyond the exercise-catalog seed: no new
+logging table, only the additive `20261001001200_m7_exercise_test_fixture.sql`.
+
+**API surface, implementing contract operations drafted (as `planned`) since M1-ish.** The OpenAPI
+operations `generateWorkoutPlan`, `getCurrentWorkoutPlan`, `getExerciseSubstitutions`,
+`createWorkoutLog`, `putWorkoutSets` and `patchWorkoutLog` already existed in
+`packages/contracts/openapi.yaml` tagged `x-noura-milestone: M7, x-noura-status: planned`; this
+milestone implements the routes/service (`apps/api/src/modules/workouts/`) and flips each to
+`implemented` only once its route and tests exist, per AGENTS.md. `putWorkoutSets` additionally
+verifies every logged `exercise_id` belongs to the log's own session (not just that the log itself is
+owned by the caller) before accepting a write — extending the ownership/consistency convention beyond
+the row level to the exercise identity within a session.
+
+**Home's "Today's workout" placeholder is wired to real data.** `getHome`
+(`apps/api/src/modules/recommendations/home-service.ts`) now reads today's session from the active
+workout plan, with its status derived from the most recent `workout_logs` row for that session when
+one is `completed` or `skipped` (falling back to the plan's own `scheduled`/`rescheduled`/`cancelled`
+status otherwise), matching the `WorkoutSessionPreview` contract exactly. `todays_workout: null` simply
+means no session is scheduled for that date, consistent with `next_meal`'s existing null convention.
+
+**Flutter.** `WorkoutScreen` replaces the M1-M6 placeholder with the real weekly schedule (one card per
+session), `WorkoutSessionScreen` shows one session's prescribed exercises with a "Replace" action per
+exercise, `ActiveSessionScreen` drives the real set-by-set logging flow with a genuine countdown rest
+timer (`ActiveSessionController`, a plain `Notifier` whose state machine advances
+exercise/set/rest/finished exactly once per `logSet`/`finish` call, with a real `Timer.periodic` between
+sets), `ExerciseReplacementScreen` lists only catalog-approved, currently-eligible substitutes, and
+`CompletionSummaryScreen` shows completed-vs-skipped sets per exercise. All four follow the established
+loading/empty/error convention (D-023). Exercise replacement is informational only in this milestone —
+there is no API operation to permanently swap an exercise within an already-generated plan (only the
+substitutions lookup and, separately, per-session logging), so picking a replacement changes what the
+user logs for that session, not the stored plan itself; a persisted "replace a planned exercise"
+endpoint is a natural M8-or-later extension, not something this milestone invents an undocumented write
+path for. `MockWorkoutRepository` provides clearly `(mock)`-labelled development data, including a
+small in-memory log store so the active-session flow can be exercised without a server. No Stitch
+screens exist for workouts (same precedent as D-023/D-026/D-027/D-028), so the existing `lib/core/ui`
+component system is used throughout.
+
+**Catalog-honesty note (carried from D-025/D-026/D-027/D-028, restated for this milestone's
+reviewer).** Every prescribed exercise, substitution and set/rep/rest number in this milestone is only
+as trustworthy as the catalog beneath it, which remains the synthetic `test_fixture` seed above — no
+licensed exercise dataset is available in this environment. The reused catalog gate already refuses
+automated workout-plan generation in a deployed environment without verified/reviewed exercise data.
+
+**Scope limits (explicit, per the ticket).** No adaptive training (plans that change based on logged
+performance over time) — every regeneration is a fresh deterministic run from the user's current
+training preferences, never influenced by prior session logs. No physique analysis. No wearable
+integrations. M8 is not started by this milestone.
+
+**Release gate (open, carried forward).** Same as D-025 through D-028: a licensed, reviewed exercise
+catalog must replace the test fixture, and the set/rep/rest prescriptions (`PRESCRIPTION_BY_LEVEL`) and
+session-sizing heuristic (one exercise per ~8 minutes) are engineering placeholders, not reviewed
+exercise-science guidance, and should be confirmed by a qualified reviewer before this is presented as
+anything more than an explainable heuristic.

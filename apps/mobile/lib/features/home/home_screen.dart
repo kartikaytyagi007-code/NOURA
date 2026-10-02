@@ -92,14 +92,23 @@ class HomeScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
+                    const SizedBox(height: NSpace.sm),
+                    Card(
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(NSpace.sm),
+                        leading: const Icon(Icons.fitness_center),
+                        title: Text(home.todaysWorkout?.title ?? "Today's workout"),
+                        subtitle: Text(
+                          home.todaysWorkout == null
+                              ? 'No session is scheduled today.'
+                              : _workoutStatusLabel(home.todaysWorkout!.status),
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push(Routes.workout),
+                      ),
+                    ),
                   ],
                 ),
-        ),
-        const FeaturePlaceholder(
-          title: "Today's workout",
-          milestone: 'M7',
-          description: 'Your scheduled session from the weekly plan.',
-          icon: Icons.fitness_center,
         ),
       ],
     );
@@ -111,6 +120,14 @@ String _slotLabel(MealSlot slot) => switch (slot) {
   MealSlot.lunch => 'Lunch',
   MealSlot.dinner => 'Dinner',
   MealSlot.snack => 'Snack',
+};
+
+String _workoutStatusLabel(WorkoutSessionPreviewStatusEnum status) => switch (status) {
+  WorkoutSessionPreviewStatusEnum.completed => 'Completed',
+  WorkoutSessionPreviewStatusEnum.skipped => 'Skipped',
+  WorkoutSessionPreviewStatusEnum.cancelled => 'Cancelled',
+  WorkoutSessionPreviewStatusEnum.rescheduled => 'Rescheduled',
+  WorkoutSessionPreviewStatusEnum.scheduled => 'Scheduled',
 };
 
 String _nutritionLine(NutrientTotals totals) {

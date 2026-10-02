@@ -13,6 +13,7 @@ import 'core/meals/meal_scan_repository.dart';
 import 'core/profile/profile_repository.dart';
 import 'core/providers.dart';
 import 'core/recommendations/recommendations_repository.dart';
+import 'core/workouts/workout_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,6 +29,7 @@ Future<void> main() async {
   final DietRepository diet;
   final MealScanRepository mealScan;
   final RecommendationsRepository recommendations;
+  final WorkoutRepository workouts;
   if (config.useMocks) {
     // Explicit development mocks: no network, no real accounts. validate() refuses this outside
     // development debug builds, and the app shows a persistent banner while it is active.
@@ -36,6 +38,7 @@ Future<void> main() async {
     diet = MockDietRepository();
     mealScan = MockMealScanRepository();
     recommendations = MockRecommendationsRepository();
+    workouts = MockWorkoutRepository();
   } else {
     await Supabase.initialize(
       url: config.supabaseUrl,
@@ -48,6 +51,7 @@ Future<void> main() async {
     diet = ApiDietRepository(apiClient);
     mealScan = ApiMealScanRepository(apiClient);
     recommendations = ApiRecommendationsRepository(apiClient);
+    workouts = ApiWorkoutRepository(apiClient);
   }
 
   runApp(
@@ -59,6 +63,7 @@ Future<void> main() async {
         dietRepositoryProvider.overrideWithValue(diet),
         mealScanRepositoryProvider.overrideWithValue(mealScan),
         recommendationsRepositoryProvider.overrideWithValue(recommendations),
+        workoutRepositoryProvider.overrideWithValue(workouts),
       ],
       child: const NouraApp(),
     ),

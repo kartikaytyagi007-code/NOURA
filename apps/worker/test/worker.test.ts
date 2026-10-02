@@ -197,7 +197,7 @@ describe('generation request relay (transactional outbox)', () => {
   });
 
   it('leaves request types without a queue untouched', async () => {
-    const { requestId } = await newRequest('workout_plan');
+    const { requestId } = await newRequest('coach_reply');
     const result = await relayGenerationRequests(relayPool, runtime.boss, log);
     expect(result.skipped).toBeGreaterThanOrEqual(1);
     expect(await queued(requestId)).toEqual({

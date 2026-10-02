@@ -78,6 +78,9 @@ import 'package:noura_api_client/src/model/media_download.dart';
 import 'package:noura_api_client/src/model/media_download_response.dart';
 import 'package:noura_api_client/src/model/meta.dart';
 import 'package:noura_api_client/src/model/next_meal.dart';
+import 'package:noura_api_client/src/model/next_meal_action_request.dart';
+import 'package:noura_api_client/src/model/next_meal_action_response.dart';
+import 'package:noura_api_client/src/model/next_meal_action_result.dart';
 import 'package:noura_api_client/src/model/next_meal_option.dart';
 import 'package:noura_api_client/src/model/next_meal_response.dart';
 import 'package:noura_api_client/src/model/number_range.dart';
@@ -408,12 +411,23 @@ ReturnType deserialize<ReturnType, BaseType>(
       return Meta.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'NextMeal':
       return NextMeal.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'NextMealActionRequest':
+      return NextMealActionRequest.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'NextMealActionResponse':
+      return NextMealActionResponse.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'NextMealActionResult':
+      return NextMealActionResult.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'NextMealActionType':
     case 'NextMealOption':
       return NextMealOption.fromJson(value as Map<String, dynamic>)
           as ReturnType;
     case 'NextMealResponse':
       return NextMealResponse.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'NextMealSource':
     case 'NumberRange':
       return NumberRange.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'NutrientTotals':

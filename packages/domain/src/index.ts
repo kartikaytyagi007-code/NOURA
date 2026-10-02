@@ -23,3 +23,6 @@ export * from './meals/recognition-schema.js';
 export * from './meals/review.js';
 export * from './meals/balance.js';
 export * from './meals/recommendations.js';
+export * from './meals/next-meal.js';
+export * from './meals/nutrition-patterns.js';
+export * from './time/timezone.js';

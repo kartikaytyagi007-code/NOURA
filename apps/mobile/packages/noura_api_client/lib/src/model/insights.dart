@@ -28,6 +28,12 @@ class Insights {
 
     required this.daysWithLogs,
 
+    required this.usableDays,
+
+    required this.excludedDays,
+
+    required this.coverageUncertain,
+
     required this.insights,
 
     required this.focus,
@@ -48,6 +54,20 @@ class Insights {
   @JsonKey(name: r'days_with_logs', required: true, includeIfNull: false)
   final int daysWithLogs;
 
+  /// Days with logged meals AND complete nutrition coverage; the denominator of any average shown.
+  // minimum: 0
+  // maximum: 7
+  @JsonKey(name: r'usable_days', required: true, includeIfNull: false)
+  final int usableDays;
+
+  /// Dates left out of the average because nothing was logged or coverage was incomplete.
+  @JsonKey(name: r'excluded_days', required: true, includeIfNull: false)
+  final List<DateTime> excludedDays;
+
+  /// True when at least one day in the window was excluded from the average.
+  @JsonKey(name: r'coverage_uncertain', required: true, includeIfNull: false)
+  final bool coverageUncertain;
+
   @JsonKey(name: r'insights', required: true, includeIfNull: false)
   final List<Insight> insights;
 
@@ -64,6 +84,9 @@ class Insights {
                 periodEnd,
                 loggedMeals,
                 daysWithLogs,
+                usableDays,
+                excludedDays,
+                coverageUncertain,
                 insights,
                 focus,
               ],
@@ -72,6 +95,9 @@ class Insights {
                 other.periodEnd,
                 other.loggedMeals,
                 other.daysWithLogs,
+                other.usableDays,
+                other.excludedDays,
+                other.coverageUncertain,
                 other.insights,
                 other.focus,
               ],
@@ -86,6 +112,9 @@ class Insights {
         periodEnd,
         loggedMeals,
         daysWithLogs,
+        usableDays,
+        excludedDays,
+        coverageUncertain,
         insights,
         focus,
       ]);

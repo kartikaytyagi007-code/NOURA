@@ -449,10 +449,43 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Three grounded next-meal options. */
+    /**
+     * The next-meal recommendation, with reasons and alternatives.
+     * @description Determines whichever of today's slots (breakfast/lunch/dinner/snack) is next by time of day
+     *     and not yet logged, or uses `slot` as an explicit override (e.g. "what should I have for
+     *     dinner"). Grounded entirely in the caller's active diet plan, today's meal log and the
+     *     eligible catalog (blueprint §9, §16 M6); never an AI-invented suggestion. `limited_context`
+     *     is true whenever today's logged intake is empty or has incomplete nutrition coverage, so a
+     *     gap-based reason is never implied from data that cannot support it.
+     */
     get: operations['getNextMeal'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/recommendations/next-meal/actions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Add, swap or dismiss a next-meal recommendation.
+     * @description `add` creates a new plan slot from the recommended recipe when the date/slot has no planned
+     *     meal yet (requires an active plan). `swap` replaces an existing planned slot with the
+     *     recommended candidate, by calling the same `replacePlanMeal` domain logic the diet-plan swap
+     *     screen uses (blueprint §9) — never a separate, duplicated code path. `dismiss` sticks for that
+     *     date/slot (D-028) so a later GET honestly reports it was dismissed instead of recomputing the
+     *     same suggestion. Safe to retry: identical `Idempotency-Key` + body replays the same result.
+     */
+    post: operations['nextMealAction'];
     delete?: never;
     options?: never;
     head?: never;
@@ -466,7 +499,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Seven-day nutrition patterns. */
+    /**
+     * Seven-day nutrition patterns.
+     * @description Daily and seven-day nutrition-pattern summaries from recorded meals (blueprint §10, §16 M6).
+     *     A protein/fibre gap is identified only when the underlying data supports it: a day with no
+     *     logs or incomplete nutrition coverage is excluded from the seven-day average and named in
+     *     `excluded_days`/`coverage_uncertain` rather than silently counted as zero, and a gap is only
+     *     ever reported once enough usable days exist to support the conclusion.
+     */
     get: operations['getInsights'];
     put?: never;
     post?: never;
@@ -1765,7 +1805,25 @@ export interface components {
       expected_revision: number;
       candidate_id: string;
     };
+    /**
+     * @description plan means this option fills an existing slot in the active diet plan (swap-able); catalog means a standalone suggestion.
+     * @enum {string}
+     */
+    NextMealSource: 'plan' | 'catalog';
     NextMealOption: {
+      source: components['schemas']['NextMealSource'];
+      /**
+       * Format: uuid
+       * @description Non-null means this option can be swapped into that plan slot (send it back as
+       *     target_plan_meal_id). An alternative to an already-planned slot carries the SAME
+       *     plan_meal_id as the plan option, since swapping it in targets that slot. Null means there
+       *     is no plan slot to swap into; use the add action instead.
+       */
+      plan_meal_id: string | null;
+      /** @description expected_revision to send with a swap action targeting plan_meal_id. Null iff plan_meal_id is null. */
+      plan_meal_revision: number | null;
+      /** @description Echo this back as nextMealAction's candidate_id to add/swap this option. */
+      candidate_id: string;
       recipe: components['schemas']['RecipeRef'];
       portions: components['schemas']['PortionRef'][];
       nutrition: components['schemas']['NutrientTotals'];
@@ -1784,6 +1842,31 @@ export interface components {
       data: components['schemas']['NextMeal'];
       meta: components['schemas']['Meta'];
     };
+    /** @enum {string} */
+    NextMealActionType: 'add' | 'swap' | 'dismiss';
+    /**
+     * @description candidate_id is required for add/swap (from the chosen NextMealOption). target_plan_meal_id
+     *     and expected_revision are required for swap (the existing plan slot being replaced).
+     */
+    NextMealActionRequest: {
+      /** Format: date */
+      date: string;
+      slot: components['schemas']['MealSlot'];
+      action: components['schemas']['NextMealActionType'];
+      candidate_id?: string | null;
+      /** Format: uuid */
+      target_plan_meal_id?: string | null;
+      expected_revision?: number | null;
+    };
+    NextMealActionResult: {
+      action: components['schemas']['NextMealActionType'];
+      plan_meal: components['schemas']['PlanMeal'] | null;
+      dismissed: boolean;
+    };
+    NextMealActionResponse: {
+      data: components['schemas']['NextMealActionResult'];
+      meta: components['schemas']['Meta'];
+    };
     Insight: {
       key: string;
       evidence: {
@@ -1798,6 +1881,12 @@ export interface components {
       period_end: string;
       logged_meals: number;
       days_with_logs: number;
+      /** @description Days with logged meals AND complete nutrition coverage; the denominator of any average shown. */
+      usable_days: number;
+      /** @description Dates left out of the average because nothing was logged or coverage was incomplete. */
+      excluded_days: string[];
+      /** @description True when at least one day in the window was excluded from the average. */
+      coverage_uncertain: boolean;
       insights: components['schemas']['Insight'][];
       focus: components['schemas']['Insight'] | null;
     };
@@ -3040,9 +3129,11 @@ export interface operations {
   };
   getNextMeal: {
     parameters: {
-      query: {
-        date: components['parameters']['DateQueryRequired'];
-        slot: components['schemas']['MealSlot'];
+      query?: {
+        /** @description Local calendar date (YYYY-MM-DD). Defaults to today in the profile timezone. */
+        date?: components['parameters']['DateQuery'];
+        /** @description Request a specific slot instead of letting the engine pick the next unlogged one. */
+        slot?: components['schemas']['MealSlot'];
       };
       header?: never;
       path?: never;
@@ -3050,7 +3141,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Up to three grounded options. Never logged automatically. */
+      /** @description Up to three grounded options (primary plus alternatives). Never logged automatically. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -3060,6 +3151,37 @@ export interface operations {
         };
       };
       401: components['responses']['Unauthenticated'];
+      422: components['responses']['ValidationError'];
+    };
+  };
+  nextMealAction: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Client-generated key (UUID recommended). Replays return the original result. */
+        'Idempotency-Key': components['parameters']['IdempotencyKey'];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NextMealActionRequest'];
+      };
+    };
+    responses: {
+      /** @description Result of the add/swap/dismiss action. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NextMealActionResponse'];
+        };
+      };
+      401: components['responses']['Unauthenticated'];
+      404: components['responses']['NotFound'];
+      409: components['responses']['RevisionConflict'];
       422: components['responses']['ValidationError'];
     };
   };

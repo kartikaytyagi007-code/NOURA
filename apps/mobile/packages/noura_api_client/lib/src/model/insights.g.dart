@@ -15,6 +15,12 @@ abstract class _$InsightsCWProxy {
 
   Insights daysWithLogs(int daysWithLogs);
 
+  Insights usableDays(int usableDays);
+
+  Insights excludedDays(List<DateTime> excludedDays);
+
+  Insights coverageUncertain(bool coverageUncertain);
+
   Insights insights(List<Insight> insights);
 
   Insights focus(Insight? focus);
@@ -30,6 +36,9 @@ abstract class _$InsightsCWProxy {
     DateTime periodEnd,
     int loggedMeals,
     int daysWithLogs,
+    int usableDays,
+    List<DateTime> excludedDays,
+    bool coverageUncertain,
     List<Insight> insights,
     Insight? focus,
   });
@@ -54,6 +63,17 @@ class _$InsightsCWProxyImpl implements _$InsightsCWProxy {
   Insights daysWithLogs(int daysWithLogs) => this(daysWithLogs: daysWithLogs);
 
   @override
+  Insights usableDays(int usableDays) => this(usableDays: usableDays);
+
+  @override
+  Insights excludedDays(List<DateTime> excludedDays) =>
+      this(excludedDays: excludedDays);
+
+  @override
+  Insights coverageUncertain(bool coverageUncertain) =>
+      this(coverageUncertain: coverageUncertain);
+
+  @override
   Insights insights(List<Insight> insights) => this(insights: insights);
 
   @override
@@ -71,6 +91,9 @@ class _$InsightsCWProxyImpl implements _$InsightsCWProxy {
     Object? periodEnd = const $CopyWithPlaceholder(),
     Object? loggedMeals = const $CopyWithPlaceholder(),
     Object? daysWithLogs = const $CopyWithPlaceholder(),
+    Object? usableDays = const $CopyWithPlaceholder(),
+    Object? excludedDays = const $CopyWithPlaceholder(),
+    Object? coverageUncertain = const $CopyWithPlaceholder(),
     Object? insights = const $CopyWithPlaceholder(),
     Object? focus = const $CopyWithPlaceholder(),
   }) {
@@ -91,6 +114,18 @@ class _$InsightsCWProxyImpl implements _$InsightsCWProxy {
           ? _value.daysWithLogs
           // ignore: cast_nullable_to_non_nullable
           : daysWithLogs as int,
+      usableDays: usableDays == const $CopyWithPlaceholder()
+          ? _value.usableDays
+          // ignore: cast_nullable_to_non_nullable
+          : usableDays as int,
+      excludedDays: excludedDays == const $CopyWithPlaceholder()
+          ? _value.excludedDays
+          // ignore: cast_nullable_to_non_nullable
+          : excludedDays as List<DateTime>,
+      coverageUncertain: coverageUncertain == const $CopyWithPlaceholder()
+          ? _value.coverageUncertain
+          // ignore: cast_nullable_to_non_nullable
+          : coverageUncertain as bool,
       insights: insights == const $CopyWithPlaceholder()
           ? _value.insights
           // ignore: cast_nullable_to_non_nullable
@@ -124,6 +159,9 @@ Insights _$InsightsFromJson(Map<String, dynamic> json) => $checkedCreate(
         'period_end',
         'logged_meals',
         'days_with_logs',
+        'usable_days',
+        'excluded_days',
+        'coverage_uncertain',
         'insights',
         'focus',
       ],
@@ -141,6 +179,17 @@ Insights _$InsightsFromJson(Map<String, dynamic> json) => $checkedCreate(
       daysWithLogs: $checkedConvert(
         'days_with_logs',
         (v) => (v as num).toInt(),
+      ),
+      usableDays: $checkedConvert('usable_days', (v) => (v as num).toInt()),
+      excludedDays: $checkedConvert(
+        'excluded_days',
+        (v) => (v as List<dynamic>)
+            .map((e) => DateTime.parse(e as String))
+            .toList(),
+      ),
+      coverageUncertain: $checkedConvert(
+        'coverage_uncertain',
+        (v) => v as bool,
       ),
       insights: $checkedConvert(
         'insights',
@@ -160,6 +209,9 @@ Insights _$InsightsFromJson(Map<String, dynamic> json) => $checkedCreate(
     'periodEnd': 'period_end',
     'loggedMeals': 'logged_meals',
     'daysWithLogs': 'days_with_logs',
+    'usableDays': 'usable_days',
+    'excludedDays': 'excluded_days',
+    'coverageUncertain': 'coverage_uncertain',
   },
 );
 
@@ -168,6 +220,11 @@ Map<String, dynamic> _$InsightsToJson(Insights instance) => <String, dynamic>{
   'period_end': instance.periodEnd.toIso8601String(),
   'logged_meals': instance.loggedMeals,
   'days_with_logs': instance.daysWithLogs,
+  'usable_days': instance.usableDays,
+  'excluded_days': instance.excludedDays
+      .map((e) => e.toIso8601String())
+      .toList(),
+  'coverage_uncertain': instance.coverageUncertain,
   'insights': instance.insights.map((e) => e.toJson()).toList(),
   'focus': instance.focus?.toJson(),
 };

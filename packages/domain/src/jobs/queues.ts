@@ -55,6 +55,7 @@ export const QUEUE_POLICIES: Record<QueueName, QueuePolicy> = {
 /** Maps generation_requests.request_type to the queue that serves it (types without a queue yet are omitted). */
 export const GENERATION_REQUEST_QUEUES = {
   diet_plan: QUEUES.dietPlanGenerate,
+  plan_regeneration: QUEUES.dietPlanGenerate,
 } as const satisfies Record<string, QueueName>;
 
 export function isQueueName(value: string): value is QueueName {

@@ -11,6 +11,7 @@ import '../features/auth/presentation/update_password_screen.dart';
 import '../features/auth/presentation/verify_email_screen.dart';
 import '../features/auth/presentation/welcome_screen.dart';
 import '../features/coach/coach_screen.dart';
+import '../features/diet/diet_plan_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/meals/meals_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
@@ -80,7 +81,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [GoRoute(path: Routes.home, builder: (_, _) => const HomeScreen())],
           ),
           StatefulShellBranch(
-            routes: [GoRoute(path: Routes.meals, builder: (_, _) => const MealsScreen())],
+            routes: [
+              GoRoute(
+                path: Routes.meals,
+                builder: (_, _) => const MealsScreen(),
+                routes: [GoRoute(path: 'diet-plan', builder: (_, _) => const DietPlanScreen())],
+              ),
+            ],
           ),
           StatefulShellBranch(
             routes: [GoRoute(path: Routes.coach, builder: (_, _) => const CoachScreen())],

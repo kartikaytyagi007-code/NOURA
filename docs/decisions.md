@@ -412,3 +412,95 @@ thresholds. They are release-gate items.
   relayed before a handler existed.
 - The target snapshot refreshes when target-relevant fields change after onboarding, but nothing
   regenerates plans automatically.
+
+## D-025 · Synthetic test-fixture catalog and the catalog planning gate (M3)
+
+**Blocker.** `data/foods`, `data/recipes`, `data/exercises` and `data/provenance` are empty beyond
+their README placeholders: no licensed nutrition dataset is available in this environment, and
+AGENTS.md forbids inventing nutrition data. Diet-plan generation (filtering, portions, nutrition
+totals, swaps) could not otherwise be built or exercised end to end.
+
+**Decision.**
+
+- A new, additive migration (`20261001001000_catalog_test_fixture.sql`) seeds ~30 foods and 16
+  recipes into the M1 catalog tables, all `quality_flag = 'test_fixture'`, under one `food_sources`
+  row named "NOURA synthetic test fixture" whose `license_notes` explicitly states it is **not a
+  licensed source** and must never be used in production. Values are deliberately round,
+  obviously-synthetic placeholder numbers (blueprint §7's "never invent nutrition data" bars
+  invented *production* data; a labelled, disclaimed development fixture used only to exercise the
+  pipeline is the documented, approved resolution for this milestone, mirroring the M1
+  `test_fixture` quality flag and its existing DB comment). The set deliberately covers: a vegan
+  base (safe for every diet), dairy-only additions (vegetarian+), egg additions (eggatarian+),
+  meat/fish (non_vegetarian only), one ingredient per `AllergyTag` value (gluten, crustacean, milk,
+  egg, fish, peanut, tree_nut, soy, sesame), `food_group_tags` for a few `ExclusionTag` values
+  (chicken, mutton, seafood, onion_garlic, root_vegetables, mushroom), and one ingredient with
+  `allergen_coverage = 'unknown'` to exercise the allergen-safety rule below. At least one recipe
+  exists per (meal slot × diet type) combination.
+- **Catalog planning gate** (`packages/domain/src/catalog/gate.ts`, mirroring D-018's
+  `planningGate`): development and test may plan from a `test_fixture`-only catalog. A deployed
+  environment (`APP_ENV` staging/production) requires at least one recipe per generation whose
+  `quality_flag` is `verified` or `reviewed`; otherwise generation fails closed with
+  `generation_requests.safe_error_code = 'catalog_unavailable'` and a user-safe message, never a
+  fabricated plan. This is enforced in the worker handler, not just at startup, because the catalog
+  can change between deploys without a restart.
+- **Diet/allergy/exclusion/dislike filtering** (`packages/domain/src/catalog/eligibility.ts`):
+  - A recipe is diet-safe only if **every** ingredient's `diet_tags` include the user's diet type
+    (vegan ⊂ vegetarian ⊂ eggatarian ⊂ non_vegetarian in permissiveness; vegetarian excludes
+    meat/fish/eggs, eggatarian permits eggs/dairy but excludes meat/fish, vegan excludes all animal
+    products — blueprint §7).
+  - **Allergen safety rule:** with any allergy constraint, an ingredient whose `allergen_coverage`
+    is not `complete` is treated as unsafe regardless of its declared `allergen_tags` — unknown or
+    partial coverage can never be certified safe. With no allergy constraint at all, incomplete
+    coverage is not itself disqualifying.
+  - Exclusions match `food_group_tags`; dislikes are a case-insensitive substring match against the
+    recipe name and each ingredient's food name. Both are intentionally simple (string/tag
+    matching) rather than NLP; this is noted as a release-gate-quality item alongside D-020's
+    vocabularies, not a clinical threshold.
+- **Portion scaling and nutrition totals** (`packages/domain/src/catalog/nutrition.ts`,
+  `packages/domain/src/nutrition/rounding.ts`): each ingredient's contribution is rounded once
+  (whole kcal; 1 decimal place for grams-denominated macros), and every total — a recipe, a swap
+  preview, a day, or eventually a week — is produced by summing those already-rounded integer/tenths
+  representations, never by re-deriving from raw grams or re-summing floating point decimals. This
+  is what guarantees a day's total always reconciles exactly with the meals that make it up. A
+  nutrient that any ingredient lacks is reported as unknown (`null`), never zero.
+- **Plan generation** (`packages/domain/src/planning/generate.ts`) is a pure, deterministic function
+  of the eligible-recipe pool, a start date and an optional point energy target: for each of 7 days
+  and each of 3–4 slots (breakfast/lunch/dinner, plus snack once preferences ask for more than 3
+  meals a day), it deterministically rotates through the slot's eligible recipes (varying by day and
+  slot index, so the same inputs always produce the same plan) and scales the recipe's portions
+  toward an even per-meal share of the daily energy target, clamped to **50%–175%** of the recipe's
+  base quantities (a provisional tolerance band chosen to keep portions plausible; not a clinical
+  value). With `basis: range` (D-024: calculation sex declined), there is no single energy number to
+  scale against, so every meal is served at its base portion rather than guessing a number.
+  Infeasibility (no eligible recipe for some required slot) is returned as an explicit result, never
+  a crash or a silently-relaxed constraint.
+- **Worker handler** (`apps/worker/src/handlers/diet-plan-generate.ts`, registered in
+  `apps/worker/src/runtime.ts` on `diet-plan.generate`) is idempotent on `generation_request_id`: it
+  reloads the request, profile, preferences and target snapshot fresh under the user's own
+  `noura_worker` transaction context (never trusting the job payload beyond the two ids, per D-017),
+  and is a no-op if the request is already terminal or if a `diet_plans` row already references it
+  (recovering a crash between committing the plan and marking the request terminal without ever
+  generating a second plan). `GENERATION_REQUEST_QUEUES` now also maps `plan_regeneration` to
+  `diet-plan.generate`, so the same handler serves both request types; regeneration supersedes the
+  previous active plan (`status = 'superseded'`, `supersedes_id` set) and inserts a new one with
+  `version + 1`, so exactly one plan is ever `active`. Requests relayed before this handler existed
+  (D-017's open question) are simply processed now — itself a demonstration of idempotent
+  at-least-once delivery — and the worker test suite covers exactly this case.
+- **API** (`apps/api/src/modules/diet`): `generateDietPlan` records or reuses a durable
+  `generation_requests` row (type `diet_plan` the first time, `plan_regeneration` once an active
+  plan exists) and is safe under concurrency via the existing partial unique index plus the
+  idempotency table (D-022); `getCurrentDietPlan` reads the active plan and computes day totals as
+  above; `getSwapOptions` is read-only (no Idempotency-Key, per the contract) and recomputes
+  eligibility fresh so a swap can never offer something unsafe even if preferences changed since
+  generation; `replacePlanMeal` requires an Idempotency-Key and `expected_revision`, re-validates the
+  candidate against fresh eligibility (rejecting one that is not actually eligible, even if it was
+  offered as a candidate a moment earlier and preferences changed in between), and updates the slot
+  in place with `revision + 1`.
+
+**Release gate (open).** Same shape as D-018: a licensed, reviewed food/recipe dataset (blueprint
+§7, M5–M7 scope) must replace the test fixture before staging or production can plan; the catalog
+gate above enforces this mechanically rather than by convention. The 50%–175% portion-scale clamp is
+a provisional engineering bound (plausible serving sizes), not a clinical or reviewed energy
+tolerance; a reviewer-set tolerance (the ticket proposed ±10% of the per-meal target as a starting
+point) is a release-gate item alongside the target policy itself (D-018) and should replace this
+clamp, or add an explicit tolerance check on top of it, once set.

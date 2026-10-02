@@ -6,6 +6,7 @@ import 'package:noura_api_client/noura_api_client.dart';
 import 'auth/auth_repository.dart';
 import 'auth/auth_state.dart';
 import 'config/app_config.dart';
+import 'diet/diet_repository.dart';
 import 'profile/profile_repository.dart';
 import 'profile/session_profile.dart';
 
@@ -15,6 +16,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) => throw Unimpleme
 final profileRepositoryProvider = Provider<ProfileRepository>(
   (ref) => throw UnimplementedError('profileRepositoryProvider'),
 );
+final dietRepositoryProvider = Provider<DietRepository>((ref) => throw UnimplementedError('dietRepositoryProvider'));
 
 class AuthController extends Notifier<AuthStatus> {
   @override

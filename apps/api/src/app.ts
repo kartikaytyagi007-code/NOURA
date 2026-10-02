@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import Fastify, { LogController, type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { ApiConfig } from './config.js';
+import { registerDietRoutes } from './modules/diet/routes.js';
 import { registerHealthRoutes } from './modules/health/routes.js';
 import { registerJobRoutes } from './modules/jobs/routes.js';
 import { registerMeRoutes } from './modules/me/routes.js';
@@ -61,5 +62,6 @@ export function buildApp(
   registerMeRoutes(app, deps);
   registerProfileRoutes(app, deps);
   registerJobRoutes(app, deps);
+  registerDietRoutes(app, deps);
   return app;
 }

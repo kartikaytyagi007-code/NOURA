@@ -139,17 +139,20 @@ describe('generation request relay (transactional outbox)', () => {
       )
     ).rows[0]!;
 
-  it('is wired into the worker: a request created before startup is relayed by its loop', async () => {
+  it('is wired into the worker: a request created before startup is relayed by its loop and then processed', async () => {
+    // D-017/D-025: a request relayed before the handler existed is simply processed once the handler
+    // registers, which is exactly what at-least-once delivery promises. This user has no profile, so
+    // the handler fails it honestly (planning_unavailable) rather than crashing or fabricating a plan.
     const deadline = Date.now() + 10_000;
     let row = await queued(wiredRequestId);
-    while (!row.queue_job_id && Date.now() < deadline) {
+    while (row.status === 'queued' && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 100));
       row = await queued(wiredRequestId);
     }
     expect(row).toEqual({
       queue_name: 'diet-plan.generate',
       queue_job_id: wiredRequestId,
-      status: 'queued',
+      status: 'failed',
     });
   });
 

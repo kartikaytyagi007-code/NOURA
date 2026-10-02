@@ -26,7 +26,7 @@ describe('OpenAPI contract structure', () => {
     }
   });
 
-  it('implements exactly the M1 and M2 operations, each tagged with its milestone', () => {
+  it('implements exactly the M1, M2 and M3 operations, each tagged with its milestone', () => {
     const implemented = Object.fromEntries(
       ops.filter((o) => o.status === 'implemented').map((o) => [o.operationId, o.milestone]),
     );
@@ -40,6 +40,10 @@ describe('OpenAPI contract structure', () => {
       putTrainingPreferences: 'M2',
       completeOnboarding: 'M2',
       getTargets: 'M2',
+      generateDietPlan: 'M3',
+      getCurrentDietPlan: 'M3',
+      getSwapOptions: 'M3',
+      replacePlanMeal: 'M3',
     });
   });
 

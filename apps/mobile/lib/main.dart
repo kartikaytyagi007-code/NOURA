@@ -8,6 +8,7 @@ import 'core/auth/auth_repository.dart';
 import 'core/auth/mock_auth_repository.dart';
 import 'core/auth/supabase_auth_repository.dart';
 import 'core/config/app_config.dart';
+import 'core/diet/diet_repository.dart';
 import 'core/profile/profile_repository.dart';
 import 'core/providers.dart';
 
@@ -22,11 +23,13 @@ Future<void> main() async {
 
   final AuthRepository auth;
   final ProfileRepository profiles;
+  final DietRepository diet;
   if (config.useMocks) {
     // Explicit development mocks: no network, no real accounts. validate() refuses this outside
     // development debug builds, and the app shows a persistent banner while it is active.
     auth = MockAuthRepository();
     profiles = MockProfileRepository();
+    diet = MockDietRepository();
   } else {
     await Supabase.initialize(
       url: config.supabaseUrl,
@@ -34,7 +37,9 @@ Future<void> main() async {
       authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
     );
     auth = SupabaseAuthRepository(Supabase.instance.client, redirectUrl: config.authRedirectUrl);
-    profiles = ApiProfileRepository(buildApiClient(buildDio(baseUrl: config.apiBaseUrl, auth: auth)));
+    final apiClient = buildApiClient(buildDio(baseUrl: config.apiBaseUrl, auth: auth));
+    profiles = ApiProfileRepository(apiClient);
+    diet = ApiDietRepository(apiClient);
   }
 
   runApp(
@@ -43,6 +48,7 @@ Future<void> main() async {
         appConfigProvider.overrideWithValue(config),
         authRepositoryProvider.overrideWithValue(auth),
         profileRepositoryProvider.overrideWithValue(profiles),
+        dietRepositoryProvider.overrideWithValue(diet),
       ],
       child: const NouraApp(),
     ),

@@ -1,12 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { filterEligibleRecipes, isRecipeEligible } from './eligibility.js';
 import {
+  filterEligibleFoods,
+  filterEligibleRecipes,
+  isFoodEligible,
+  isRecipeEligible,
+} from './eligibility.js';
+import {
+  CHICKEN,
   CHICKEN_BOWL,
   EGG_BREAKFAST,
   MYSTERY_RECIPE,
+  MYSTERY_SPICE,
+  PANEER,
   PANEER_BOWL,
   PEANUT_SNACK,
+  PEANUTS,
+  RICE,
   VEG_RICE_BOWL,
+  VEGETABLES,
   ALL_RECIPES,
 } from './test-fixtures.js';
 
@@ -93,5 +104,39 @@ describe('exclusions and dislikes', () => {
   it('excludes a recipe matching a free-text dislike, case-insensitively', () => {
     expect(isRecipeEligible(PANEER_BOWL, { ...NO_CONSTRAINTS, dislikes: ['Paneer'] })).toBe(false);
     expect(isRecipeEligible(PANEER_BOWL, { ...NO_CONSTRAINTS, dislikes: ['mushroom'] })).toBe(true);
+  });
+});
+
+/** M5: the same four rules applied to a bare catalog food (blueprint §8 "Fix My Plate"). */
+describe('food-level eligibility (M5 plate-fix suggestion pool)', () => {
+  const ALL_FOODS = [RICE, PANEER, VEGETABLES, CHICKEN, PEANUTS, MYSTERY_SPICE];
+
+  it('diet type excludes the same foods a recipe-level check would', () => {
+    expect(isFoodEligible(PANEER, { ...NO_CONSTRAINTS, diet_type: 'vegan' })).toBe(false);
+    expect(isFoodEligible(RICE, { ...NO_CONSTRAINTS, diet_type: 'vegan' })).toBe(true);
+    expect(isFoodEligible(CHICKEN, { ...NO_CONSTRAINTS, diet_type: 'vegetarian' })).toBe(false);
+  });
+
+  it('allergy safety: unknown coverage is unsafe once there is any allergy constraint', () => {
+    expect(isFoodEligible(MYSTERY_SPICE, { ...NO_CONSTRAINTS, allergy_ids: ['gluten'] })).toBe(
+      false,
+    );
+    expect(isFoodEligible(MYSTERY_SPICE, NO_CONSTRAINTS)).toBe(true);
+    expect(isFoodEligible(PEANUTS, { ...NO_CONSTRAINTS, allergy_ids: ['peanut'] })).toBe(false);
+  });
+
+  it('exclusions and dislikes filter a food exactly like a recipe ingredient', () => {
+    expect(isFoodEligible(CHICKEN, { ...NO_CONSTRAINTS, exclusion_ids: ['chicken'] })).toBe(false);
+    expect(isFoodEligible(PANEER, { ...NO_CONSTRAINTS, dislikes: ['paneer'] })).toBe(false);
+  });
+
+  it('filterEligibleFoods returns only the safe subset', () => {
+    const eligible = filterEligibleFoods(ALL_FOODS, {
+      ...NO_CONSTRAINTS,
+      allergy_ids: ['peanut', 'milk'],
+    });
+    expect(eligible.map((f) => f.id)).not.toContain(PEANUTS.id);
+    expect(eligible.map((f) => f.id)).not.toContain(PANEER.id);
+    expect(eligible.map((f) => f.id)).toContain(RICE.id);
   });
 });

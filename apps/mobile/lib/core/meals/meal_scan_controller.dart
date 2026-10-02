@@ -129,17 +129,14 @@ class MealScanController extends Notifier<MealScanFlowState> {
     state = current.copyWithItems([...current.items, ReviewItem(temporaryId: id, label: label, grams: null)]);
   }
 
-  /// Confirms the (edited) items, then logs the meal. Returns the saved log on success; a stale
-  /// revision surfaces as [ApiFailure] (kind conflict) for the caller to show and let the user retry
-  /// from a reloaded scan, matching the M2/M3 idempotency/revision conventions.
-  Future<MealLog> confirmAndLog({
-    required DateTime consumedAt,
-    required String timezone,
-    required MealSlot slot,
-  }) async {
+  /// Confirms the (edited) items and moves to the Meal Balance / Fix-My-Plate step (blueprint §8:
+  /// confirm → Meal Balance → Fix My Plate → log). Nothing is logged yet. A stale revision surfaces
+  /// as [ApiFailure] for the caller, and the review step (with edits intact) is restored so the user
+  /// can reload and retry, matching the M2/M3 revision-conflict convention.
+  Future<void> confirmItems() async {
     final current = state;
     if (current is! MealScanReviewing) {
-      throw StateError('confirmAndLog called outside the review step');
+      throw StateError('confirmItems called outside the review step');
     }
     final items = [
       for (final item in current.items)
@@ -147,20 +144,62 @@ class MealScanController extends Notifier<MealScanFlowState> {
     ];
     state = const MealScanSaving();
     try {
-      // Confirming the items computes and persists their nutrition server-side; the diary entry
-      // then reuses that same computation (never recomputed on the client).
-      await _repository.confirmItems(scanId: current.scanId, expectedRevision: current.revision, items: items);
+      final analysis = await _repository.confirmItems(
+        scanId: current.scanId,
+        expectedRevision: current.revision,
+        items: items,
+      );
+      state = MealScanAnalyzed(
+        scanId: current.scanId,
+        revision: analysis.revision,
+        analysis: analysis,
+        confirmedItems: items,
+      );
+    } on ApiFailure {
+      state = current;
+      rethrow;
+    }
+  }
+
+  /// Returns to the review/correction step from the analyzed step, so the user can fix a
+  /// mis-recognized item or portion rather than only accepting or rejecting the whole meal (M5
+  /// ticket's "user-correction state": it reuses M4's correction flow instead of duplicating it).
+  void backToReview() {
+    final current = state;
+    if (current is! MealScanAnalyzed) return;
+    state = MealScanReviewing(
+      scanId: current.scanId,
+      revision: current.revision,
+      items: [
+        for (final input in current.confirmedItems)
+          ReviewItem(temporaryId: input.temporaryId ?? input.label, label: input.label, grams: input.grams),
+      ],
+    );
+  }
+
+  /// Logs the meal analyzed in [MealScanAnalyzed] (as-is, or after the user applied Fix-My-Plate
+  /// changes by editing items and re-confirming). Returns the saved log on success.
+  Future<MealLog> logConfirmedMeal({
+    required DateTime consumedAt,
+    required String timezone,
+    required MealSlot slot,
+  }) async {
+    final current = state;
+    if (current is! MealScanAnalyzed) {
+      throw StateError('logConfirmedMeal called outside the analyzed step');
+    }
+    state = const MealScanSaving();
+    try {
       final log = await _repository.logMeal(
         consumedAt: consumedAt,
         timezone: timezone,
         slot: slot,
         scanId: current.scanId,
-        items: items,
+        items: current.confirmedItems,
       );
       state = MealScanSaved(log);
       return log;
     } on ApiFailure {
-      // Restore the review step (with the user's edits intact) so they can retry or adjust.
       state = current;
       rethrow;
     }

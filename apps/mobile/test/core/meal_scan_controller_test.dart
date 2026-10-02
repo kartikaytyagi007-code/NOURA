@@ -71,6 +71,23 @@ class FakeMealScanRepository implements MealScanRepository {
   }
 
   @override
+  Future<PlateFixes> getPlateFixes({required String scanId, required int expectedRevision}) async {
+    return PlateFixes(
+      scanId: scanId,
+      revision: expectedRevision,
+      fixes: const [],
+      afterChanges: AfterChangesScenario(
+        totals: NutrientTotals(
+          nutrients: _n(300),
+          coverage: Coverage(itemsTotal: 1, itemsWithNutrition: 1, complete: true),
+        ),
+        mealBalance: MealBalance(score: 50, policyVersion: 'v1', components: const [], missingDataMessage: null),
+        assumptions: const [],
+      ),
+    );
+  }
+
+  @override
   Future<MealLog> logMeal({
     required DateTime consumedAt,
     required String timezone,
@@ -198,19 +215,22 @@ void main() {
     controller.removeItem('item-1');
     controller.addManualItem('Banana');
 
-    final log = await controller.confirmAndLog(
+    await controller.confirmItems();
+    expect(container.read(mealScanControllerProvider), isA<MealScanAnalyzed>());
+    expect(repo.confirmCalls, 1);
+
+    final log = await controller.logConfirmedMeal(
       consumedAt: DateTime(2026, 10, 2, 8),
       timezone: 'UTC',
       slot: MealSlot.breakfast,
     );
 
     expect(log.id, 'log-1');
-    expect(repo.confirmCalls, 1);
     expect(repo.logCalls, 1);
     expect(container.read(mealScanControllerProvider), isA<MealScanSaved>());
   });
 
-  test('confirmAndLog restores the review step (with edits) on a server failure', () async {
+  test('confirmItems restores the review step (with edits) on a server failure', () async {
     final repo = FakeMealScanRepository(statuses: [MealScanStatus.needsConfirmation], recognition: _recognition);
     final container = _container(repo);
     final controller = container.read(mealScanControllerProvider.notifier);
@@ -219,13 +239,37 @@ void main() {
 
     repo.confirmItemsOverride = () => throw const ApiFailure(kind: ApiFailureKind.conflict, message: 'stale');
 
-    await expectLater(
-      controller.confirmAndLog(consumedAt: DateTime(2026, 10, 2, 8), timezone: 'UTC', slot: MealSlot.breakfast),
-      throwsA(isA<ApiFailure>()),
-    );
+    await expectLater(controller.confirmItems(), throwsA(isA<ApiFailure>()));
     final state = container.read(mealScanControllerProvider);
     expect(state, isA<MealScanReviewing>());
     expect((state as MealScanReviewing).items.single.grams, 175);
+  });
+
+  test(
+    'backToReview moves from the analyzed step back to review with the confirmed items (M5 correction state)',
+    () async {
+      final repo = FakeMealScanRepository(statuses: [MealScanStatus.needsConfirmation], recognition: _recognition);
+      final container = _container(repo);
+      final controller = container.read(mealScanControllerProvider.notifier);
+      await controller.captureAndAnalyze(Uint8ListFixture.bytes, mime: ImageMime.imageSlashJpeg);
+      await controller.confirmItems();
+      expect(container.read(mealScanControllerProvider), isA<MealScanAnalyzed>());
+
+      controller.backToReview();
+      final state = container.read(mealScanControllerProvider);
+      expect(state, isA<MealScanReviewing>());
+      expect((state as MealScanReviewing).items.single.label, 'White rice');
+    },
+  );
+
+  test('logConfirmedMeal called outside the analyzed step throws', () async {
+    final repo = FakeMealScanRepository(statuses: [MealScanStatus.needsConfirmation], recognition: _recognition);
+    final container = _container(repo);
+    final controller = container.read(mealScanControllerProvider.notifier);
+    expect(
+      () => controller.logConfirmedMeal(consumedAt: DateTime(2026, 10, 2), timezone: 'UTC', slot: MealSlot.lunch),
+      throwsA(isA<StateError>()),
+    );
   });
 }
 

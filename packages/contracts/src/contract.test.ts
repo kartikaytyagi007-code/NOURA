@@ -55,6 +55,7 @@ describe('OpenAPI contract structure', () => {
       listMealLogs: 'M4',
       patchMealLog: 'M4',
       deleteMealLog: 'M4',
+      createPlateFixes: 'M5',
     });
   });
 

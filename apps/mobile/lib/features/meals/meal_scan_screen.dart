@@ -8,10 +8,10 @@ import 'package:noura_api_client/noura_api_client.dart';
 import '../../core/api/api_failure.dart';
 import '../../core/meals/meal_scan_controller.dart';
 import '../../core/meals/meal_scan_state.dart';
-import '../../core/providers.dart';
 import '../../core/ui/components/n_button.dart';
 import '../../core/ui/components/state_views.dart';
 import '../../core/ui/tokens.dart';
+import 'meal_balance_view.dart';
 
 /// Camera/gallery capture, upload, processing, results, correction and error states for one meal
 /// scan (blueprint §8, M4 ticket). The screen is a thin view over [MealScanController]'s state
@@ -29,6 +29,7 @@ class MealScanScreen extends ConsumerWidget {
         MealScanUploading() => const LoadingView(label: 'Uploading photo'),
         MealScanProcessing() => const LoadingView(label: 'Analyzing your meal'),
         MealScanReviewing() => _ReviewView(state: state),
+        MealScanAnalyzed() => MealBalanceView(state: state),
         MealScanSaving() => const LoadingView(label: 'Saving'),
         MealScanSaved(log: final log) => _SavedView(log: log),
         MealScanFailed() => _FailedView(state: state),
@@ -134,25 +135,12 @@ class _ReviewView extends ConsumerStatefulWidget {
 }
 
 class _ReviewViewState extends ConsumerState<_ReviewView> {
-  MealSlot _slot = _defaultSlot();
   bool _saving = false;
 
-  static MealSlot _defaultSlot() {
-    final hour = DateTime.now().hour;
-    if (hour < 11) return MealSlot.breakfast;
-    if (hour < 16) return MealSlot.lunch;
-    if (hour < 21) return MealSlot.dinner;
-    return MealSlot.snack;
-  }
-
-  Future<void> _save() async {
-    final me = ref.read(meControllerProvider).value;
-    final timezone = me?.profile.timezone ?? 'UTC';
+  Future<void> _confirm() async {
     setState(() => _saving = true);
     try {
-      await ref
-          .read(mealScanControllerProvider.notifier)
-          .confirmAndLog(consumedAt: DateTime.now(), timezone: timezone, slot: _slot);
+      await ref.read(mealScanControllerProvider.notifier).confirmItems();
     } on ApiFailure catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
@@ -215,26 +203,14 @@ class _ReviewViewState extends ConsumerState<_ReviewView> {
                 icon: const Icon(Icons.add),
                 label: const Text('Add a missed item'),
               ),
-              const SizedBox(height: NSpace.md),
-              DropdownButtonFormField<MealSlot>(
-                initialValue: _slot,
-                decoration: const InputDecoration(labelText: 'Meal'),
-                items: const [
-                  DropdownMenuItem(value: MealSlot.breakfast, child: Text('Breakfast')),
-                  DropdownMenuItem(value: MealSlot.lunch, child: Text('Lunch')),
-                  DropdownMenuItem(value: MealSlot.dinner, child: Text('Dinner')),
-                  DropdownMenuItem(value: MealSlot.snack, child: Text('Snack')),
-                ],
-                onChanged: (v) => setState(() => _slot = v ?? _slot),
-              ),
             ],
           ),
         ),
         SafeArea(
           minimum: const EdgeInsets.all(NSpace.pageMargin),
           child: NButton(
-            label: items.isEmpty ? 'Add at least one item' : 'Save to diary',
-            onPressed: items.isEmpty ? null : _save,
+            label: items.isEmpty ? 'Add at least one item' : 'See Meal Balance',
+            onPressed: items.isEmpty ? null : _confirm,
             loading: _saving,
           ),
         ),

@@ -423,8 +423,110 @@ How the M4 acceptance gate maps to tests:
 - Android/iOS builds, the container image and Google/Apple sign-in remain unverified here, unchanged
   from M1-M3.
 
-### M5 hand-off
+## M5 Meal Balance and Fix My Plate
 
-Versioned Meal Balance, evidence and keep/reduce/add suggestions with a scenario calculator
-(blueprint §16, `createPlateFixes`, already drafted in the contract as `x-noura-status: planned`,
-`x-noura-milestone: M5`). Not started.
+**Ticket.** Formalize M4's provisional Meal Balance calculation into a versioned, documented,
+explainable score; add meal-level nutrient indicators with uncertainty; add backend keep/reduce/add
+recommendations respecting diet/allergy/exclusion/dislike constraints; add a suggested "after changes"
+score that is only ever presented when fully supported by catalog data; and the Flutter results and
+Fix My Plate screens on top of the M4 meal-scan flow (see D-027).
+
+### Delivered
+
+- **Meal Balance formalized (`packages/domain/src/meals/balance.ts`):** `meal-balance-v1-provisional`
+  becomes `meal-balance-v1`. The four-component math (protein/fibre adequacy, vegetable-fruit
+  presence, variety, 0-25 each, null with a message on incomplete coverage) is unchanged — it already
+  matched blueprint §7 — but every threshold is now named and documented in an exported
+  `MEAL_BALANCE_POLICY` constant, and each component carries a qualitative `band`
+  (`low`/`adequate`/`good`), which is the per-nutrient indicator the ticket asked for.
+- **Recommendations (`packages/domain/src/meals/recommendations.ts`, new):** `createPlateFixes`
+  deterministically proposes up to one keep/reduce/add action, each from a suggestion pool filtered by
+  new `isFoodDietSafe`/`isFoodAllergySafe`/`isFoodExclusionSafe`/`isFoodDislikeSafe`/`isFoodEligible`/
+  `filterEligibleFoods` functions added to `packages/domain/src/catalog/eligibility.ts` — the exact
+  same rules D-025 already applies to recipe ingredients, reused rather than reimplemented, and
+  additionally restricted to foods with complete macro data so every projection is real.
+- **After-changes projection:** `createPlateFixes` also returns a combined `after_changes` scenario
+  (all proposed fixes applied together) with its gram-level `assumptions` stated as text; its
+  `meal_balance.score` is null (via the existing `computeMealBalance` convention) whenever any part of
+  the picture is not fully calculable, rather than ever being estimated.
+- **API:** `POST /v1/meal-scans/{id}/plate-fixes` (`createPlateFixes`,
+  `apps/api/src/modules/meals/plate-fixes-service.ts`) flips to `x-noura-status: implemented`. It is a
+  pure computation over the scan's already-confirmed analysis, the live catalog and the caller's live
+  diet/allergy/exclusion/dislike preferences (reusing `loadDietPlanningInputs` from M3) — nothing new
+  is written, so no new migration or user-owned table was needed. It still requires
+  `expected_revision` (409 on stale) and an `Idempotency-Key` (`withIdempotency`, same as every other
+  mutating route), 422s (`CONSTRAINT_CONFLICT`) if the scan has not been confirmed yet, and 404s for
+  another user's scan.
+- **Contracts:** `MealBalanceComponent` gained `band`; `PlateFixes` gained `after_changes` (new
+  `AfterChangesScenario` schema); `createPlateFixes` flipped to `implemented`. TS and Dart clients
+  regenerated and committed.
+- **Flutter:** `MealScanController` gains an explicit `MealScanAnalyzed` step between confirmation and
+  logging (confirm → Meal Balance → Fix My Plate → log, blueprint §8), replacing the old single-shot
+  `confirmAndLog` with `confirmItems()` and `logConfirmedMeal()`; `backToReview()` is the
+  user-correction state, reusing M4's review screen rather than duplicating it. `MealBalanceView`
+  (`apps/mobile/lib/features/meals/meal_balance_view.dart`) shows the score, components and bands
+  inline in the scan flow; `FixMyPlateScreen` (`fix_my_plate_screen.dart`, pushed separately) has its
+  own idle/loading/loaded/empty/error states via a new `PlateFixesController`
+  (`core/meals/plate_fixes_controller.dart`), listing up to three suggestion cards and the combined
+  after-changes card. `MockMealScanRepository.getPlateFixes` returns one clearly `(mock)`-labelled
+  suggestion.
+- **Docs:** decision D-027; this M5 section.
+
+### Acceptance checks (run 2026-10-02 in the development container)
+
+| Check                                                           | Command                                                                                                                   | Result                                                   |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Secret scan                                                     | `pnpm secrets:check`                                                                                                      | Passed (696 files)                                       |
+| Lint and format                                                 | `pnpm lint`                                                                                                               | Passed                                                   |
+| OpenAPI lint                                                    | `pnpm contracts:lint`                                                                                                     | Valid. 14 pre-existing example warnings (same as M1-M4)  |
+| Typecheck                                                       | `pnpm typecheck`                                                                                                          | Passed (6 workspace projects)                            |
+| Contract, domain and ai unit tests                              | `pnpm -r --filter './packages/*' run test`                                                                                | Passed. contracts 13, domain 121, ai 6                   |
+| Migrations, RLS, grants                                         | `supabase`: `vitest run` against PostgreSQL 16                                                                            | Passed. 43 tests, unchanged from M4 (no new migration)   |
+| API integration (meal-scan, plate-fixes routes)                 | `apps/api`: `vitest run`                                                                                                  | Passed. 95 tests (89 from M1-M4, 6 new)                  |
+| Worker                                                          | `apps/worker`: `vitest run`                                                                                               | Passed. 28 tests, unchanged from M4 (no new handler)     |
+| Flutter format, analyze and tests                               | `dart format --line-length 120`, `flutter analyze`, `flutter test`                                                        | Passed. No issues; 86 tests (82 from M1-M4, 4 new)       |
+| Contract drift                                                  | `pnpm contracts:check`                                                                                                    | Passed (after committing regenerated TS/Dart clients)    |
+| Incomplete coverage yields a null score, never a fabricated one | Domain tests: `computeMealBalance`/`createPlateFixes` with an unmatched item                                              | Passed                                                   |
+| Recommendations never suggest an allergen/exclusion/dislike     | Domain tests: allergy, exclusion and dislike constraints each checked against the suggestion pool                         | Passed                                                   |
+| Suggestions filtered by diet type and catalog completeness      | Domain test: vegan constraint excludes a non-vegan food from suggestions                                                  | Passed                                                   |
+| Deterministic for identical inputs                              | Domain test: same items/catalog/constraints produce identical fixes and after-changes score                               | Passed                                                   |
+| Projected changes never modify actual logs                      | API/domain: `createPlateFixes` writes nothing to `meal_scans`/`meal_logs`; only `confirmMealScanItems`/`createMealLog` do | Passed (no new write path exists)                        |
+| Authorization: cross-owner plate fixes denied                   | API test: another user's scan returns 404 for `createPlateFixes`                                                          | Passed                                                   |
+| Stale confirmation rejected                                     | API test: `expected_revision` behind the scan's confirmed revision returns 409                                            | Passed                                                   |
+| Plate fixes require prior confirmation                          | API test: calling before `confirmMealScanItems` returns 422 `CONSTRAINT_CONFLICT`                                         | Passed                                                   |
+| Idempotent retry                                                | API test: same `Idempotency-Key` replays the identical response                                                           | Passed                                                   |
+| Container image                                                 | `docker build .`                                                                                                          | **Not run here.** No Docker daemon, unchanged from M1-M4 |
+| Local Supabase stack                                            | `supabase start && supabase db reset`                                                                                     | **Not run here.** Plain-Postgres shim used (D-012)       |
+
+How the M5 acceptance gate maps to tests:
+
+- **Incomplete data yields null score:** `balance.test.ts` and `recommendations.test.ts` both assert
+  `score === null` with a `missing_data_message` whenever coverage is incomplete, for both the base
+  Meal Balance and the `after_changes` projection.
+- **Projected changes don't modify actual logs:** `createPlateFixesForScan` has no write statement at
+  all (reviewable directly), and the API test suite's existing meal-log tests are unaffected/unchanged
+  by this milestone — the only way to change a logged meal remains `confirmMealScanItems` →
+  `createMealLog`/`patchMealLog`.
+- **Recalculation stable:** the `createPlateFixes` determinism test runs the same inputs twice with
+  independent id counters and asserts identical suggested foods and identical after-changes score.
+
+### Known limitations and release gates
+
+- **No licensed nutrition/recipe catalog (open, carried from M3/M4, the central blocker).** Plate-fix
+  suggestions and the Meal Balance score are computed correctly, but only against the synthetic
+  `test_fixture` catalog (D-025); see D-027's catalog-honesty note.
+- **Meal Balance thresholds and recommendation defaults are engineering placeholders (provisional,
+  D-027).** `MEAL_BALANCE_POLICY`'s grams-for-max-score values and the recommendation module's default
+  suggested gram amounts (60%/80g/40g/100g/60g) have not been reviewed; they should be confirmed by a
+  reviewer before this is presented as anything beyond an explainable heuristic.
+- **Catalog matching for "reduce"/"add" candidates (provisional, same caveat as D-025's dislike
+  filter).** Vegetable/fruit detection is keyword matching against food names, not a dedicated catalog
+  tag or NLP.
+- **No scheduled purge, no real AI vision provider, no licensed catalog (carried, unchanged from
+  M4).**
+- Android/iOS builds, the container image and Google/Apple sign-in remain unverified here, unchanged
+  from M1-M4.
+
+### M6 hand-off
+
+Next-meal options, daily summaries and seven-day patterns (blueprint §9, §10, §16 M6). Not started.

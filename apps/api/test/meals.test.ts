@@ -336,6 +336,140 @@ describe('meal scan recognition and review', () => {
   });
 });
 
+describe('plate fixes (M5)', () => {
+  /** Upload, recognize, and confirm a rice-only meal (deliberately unbalanced), returning scan_id/revision. */
+  async function confirmedRiceOnlyScan(
+    user: Caller,
+    filler: number,
+  ): Promise<{ scanId: string; revision: number }> {
+    const mediaId = await uploadVerifiedImage(user, png(100, 100, filler));
+    const created = await user.call('POST', '/v1/meal-scans', { media_id: mediaId });
+    await markRecognized(created.body.data.scan_id, created.body.data.job_id, []);
+    const scan = await user.call('GET', `/v1/meal-scans/${created.body.data.scan_id}`);
+    const confirm = await user.call(
+      'PUT',
+      `/v1/meal-scans/${created.body.data.scan_id}/confirmed-items`,
+      { expected_revision: scan.body.data.revision, items: [{ label: 'White rice', grams: 350 }] },
+    );
+    expect(confirm.status).toBe(200);
+    return { scanId: created.body.data.scan_id, revision: confirm.body.data.revision };
+  }
+
+  it('proposes keep/reduce/add fixes with a real projected scenario and an after-changes score', async () => {
+    const user = await newUser();
+    const { scanId, revision } = await confirmedRiceOnlyScan(user, 20);
+
+    const res = await user.call(
+      'POST',
+      `/v1/meal-scans/${scanId}/plate-fixes`,
+      { expected_revision: revision },
+      { key: randomUUID() },
+    );
+    expect(res.status).toBe(200);
+    expectMatchesContract('createPlateFixes', 200, res.body);
+    expect(res.body.data.scan_id).toBe(scanId);
+    expect(res.body.data.fixes.length).toBeGreaterThan(0);
+    expect(res.body.data.fixes.length).toBeLessThanOrEqual(3);
+    for (const fix of res.body.data.fixes) {
+      expect(fix.requires_confirmation).toBe(true);
+      expect(fix.projected.label).toBe('projected');
+    }
+    // The after-changes scenario is always present; its score is only non-null when fully calculable.
+    expect(res.body.data.after_changes).toBeDefined();
+    expect(Array.isArray(res.body.data.after_changes.assumptions)).toBe(true);
+  });
+
+  it('never suggests a food the user is allergic to or has excluded', async () => {
+    const user = await newUser();
+    await user.call('PUT', '/v1/me/preferences', {
+      expected_revision: 0,
+      diet_type: 'non_vegetarian',
+      allergy_ids: ['milk'],
+      exclusion_ids: [],
+      dislikes: [],
+      cuisines: ['north_indian'],
+      budget_band: 'medium',
+      cooking_time: 'moderate',
+      meals_per_day: 3,
+    });
+    const { scanId, revision } = await confirmedRiceOnlyScan(user, 21);
+    const res = await user.call(
+      'POST',
+      `/v1/meal-scans/${scanId}/plate-fixes`,
+      { expected_revision: revision },
+      { key: randomUUID() },
+    );
+    expect(res.status).toBe(200);
+    const paneer = await admin.query<{ id: string }>(
+      "select id from app.foods where name = 'Paneer'",
+    );
+    const suggestedIds = res.body.data.fixes
+      .filter((f: { type: string }) => f.type === 'add')
+      .map((f: { catalog_food_id: string }) => f.catalog_food_id);
+    expect(suggestedIds).not.toContain(paneer.rows[0]!.id);
+  });
+
+  it('requires a stored confirmed analysis before plate fixes can be computed', async () => {
+    const user = await newUser();
+    const mediaId = await uploadVerifiedImage(user, png(100, 100, 22));
+    const created = await user.call('POST', '/v1/meal-scans', { media_id: mediaId });
+    await markRecognized(created.body.data.scan_id, created.body.data.job_id, []);
+
+    const res = await user.call(
+      'POST',
+      `/v1/meal-scans/${created.body.data.scan_id}/plate-fixes`,
+      { expected_revision: 1 },
+      { key: randomUUID() },
+    );
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe('CONSTRAINT_CONFLICT');
+  });
+
+  it('rejects a stale revision instead of computing fixes against an outdated confirmation', async () => {
+    const user = await newUser();
+    const { scanId, revision } = await confirmedRiceOnlyScan(user, 23);
+    const res = await user.call(
+      'POST',
+      `/v1/meal-scans/${scanId}/plate-fixes`,
+      { expected_revision: revision - 1 },
+      { key: randomUUID() },
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it('replays an identical request under the same Idempotency-Key', async () => {
+    const user = await newUser();
+    const { scanId, revision } = await confirmedRiceOnlyScan(user, 24);
+    const key = randomUUID();
+    const first = await user.call(
+      'POST',
+      `/v1/meal-scans/${scanId}/plate-fixes`,
+      { expected_revision: revision },
+      { key },
+    );
+    const second = await user.call(
+      'POST',
+      `/v1/meal-scans/${scanId}/plate-fixes`,
+      { expected_revision: revision },
+      { key },
+    );
+    expect(second.body.data).toEqual(first.body.data);
+  });
+
+  it('never lets another user compute plate fixes for someone else’s scan', async () => {
+    const owner = await newUser();
+    const other = await newUser();
+    const { scanId, revision } = await confirmedRiceOnlyScan(owner, 25);
+    const res = await other.call(
+      'POST',
+      `/v1/meal-scans/${scanId}/plate-fixes`,
+      { expected_revision: revision },
+      { key: randomUUID() },
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('meal logs', () => {
   it('creates, lists, edits and deletes a manual meal log', async () => {
     const user = await newUser();

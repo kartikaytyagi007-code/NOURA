@@ -25,6 +25,8 @@ class MealBalanceComponent {
 
     required this.maxScore,
 
+    required this.band,
+
     required this.evidence,
   });
 
@@ -42,6 +44,10 @@ class MealBalanceComponent {
   @JsonKey(name: r'max_score', required: true, includeIfNull: false)
   final int maxScore;
 
+  /// Qualitative read of this component (M5 per-nutrient indicator), null only when score is null.
+  @JsonKey(name: r'band', required: true, includeIfNull: true)
+  final MealBalanceComponentBandEnum? band;
+
   @JsonKey(name: r'evidence', required: true, includeIfNull: false)
   final Map<String, Object> evidence;
 
@@ -50,15 +56,21 @@ class MealBalanceComponent {
         other is MealBalanceComponent &&
             runtimeType == other.runtimeType &&
             equals(
-              [key, score, maxScore, evidence],
-              [other.key, other.score, other.maxScore, other.evidence],
+              [key, score, maxScore, band, evidence],
+              [
+                other.key,
+                other.score,
+                other.maxScore,
+                other.band,
+                other.evidence,
+              ],
             );
   }
 
   @override
   int get hashCode =>
       runtimeType.hashCode ^
-      mapPropsToHashCode([key, score, maxScore, evidence]);
+      mapPropsToHashCode([key, score, maxScore, band, evidence]);
 
   factory MealBalanceComponent.fromJson(Map<String, dynamic> json) =>
       _$MealBalanceComponentFromJson(json);
@@ -82,6 +94,23 @@ enum MealBalanceComponentKeyEnum {
   variety(r'variety');
 
   const MealBalanceComponentKeyEnum(this.value);
+
+  final String value;
+
+  @override
+  String toString() => value;
+}
+
+/// Qualitative read of this component (M5 per-nutrient indicator), null only when score is null.
+enum MealBalanceComponentBandEnum {
+  @JsonValue(r'low')
+  low(r'low'),
+  @JsonValue(r'adequate')
+  adequate(r'adequate'),
+  @JsonValue(r'good')
+  good(r'good');
+
+  const MealBalanceComponentBandEnum(this.value);
 
   final String value;
 

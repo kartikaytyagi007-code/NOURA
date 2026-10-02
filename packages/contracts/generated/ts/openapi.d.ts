@@ -1377,6 +1377,11 @@ export interface components {
       score: number | null;
       /** @description Each component is capped at 25 in policy v1. */
       max_score: number;
+      /**
+       * @description Qualitative read of this component (M5 per-nutrient indicator), null only when score is null.
+       * @enum {string|null}
+       */
+      band: 'low' | 'adequate' | 'good' | null;
       evidence: {
         [key: string]: unknown;
       };
@@ -1559,11 +1564,18 @@ export interface components {
       /** @description Always true; a fix never applies without user confirmation. */
       requires_confirmation: boolean;
     };
+    /** @description What the meal's totals and Meal Balance would become if every suggested fix were applied together. `meal_balance.score` is null (per MealBalance's existing convention) whenever any part of the combined scenario cannot be calculated from complete catalog data — it is never estimated. Projected, not actual intake, per blueprint §7. */
+    AfterChangesScenario: {
+      totals: components['schemas']['NutrientTotals'];
+      meal_balance: components['schemas']['MealBalance'];
+      assumptions: string[];
+    };
     PlateFixes: {
       /** Format: uuid */
       scan_id: string;
       revision: number;
       fixes: components['schemas']['PlateAction'][];
+      after_changes: components['schemas']['AfterChangesScenario'];
     };
     PlateFixesResponse: {
       data: components['schemas']['PlateFixes'];

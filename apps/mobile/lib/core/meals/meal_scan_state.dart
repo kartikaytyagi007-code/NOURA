@@ -96,6 +96,23 @@ class MealScanReviewing extends MealScanFlowState {
       MealScanReviewing(scanId: scanId, revision: revision, items: items, clarification: clarification);
 }
 
+/// Items are confirmed and calculated (nutrition + Meal Balance); the user reviews the result and
+/// can open "Fix My Plate", go back to correct items, or log the meal as-is (blueprint §8 step 7,
+/// M5). [confirmedItems] is kept so the same items can be re-submitted to [MealScanController.logConfirmedMeal]
+/// without the user re-entering anything.
+class MealScanAnalyzed extends MealScanFlowState {
+  const MealScanAnalyzed({
+    required this.scanId,
+    required this.revision,
+    required this.analysis,
+    required this.confirmedItems,
+  });
+  final String scanId;
+  final int revision;
+  final MealAnalysis analysis;
+  final List<ConfirmedItemInput> confirmedItems;
+}
+
 class MealScanSaving extends MealScanFlowState {
   const MealScanSaving();
 }

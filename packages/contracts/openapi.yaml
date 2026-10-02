@@ -404,7 +404,7 @@ paths:
       summary: Propose up to three plate improvements.
       tags: [meals]
       x-noura-milestone: M5
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1987,11 +1987,16 @@ components:
     MealBalanceComponent:
       type: object
       additionalProperties: false
-      required: [key, score, max_score, evidence]
+      required: [key, score, max_score, band, evidence]
       properties:
         key: { type: string, enum: [protein, fibre, vegetable_fruit, variety] }
         score: { type: number, nullable: true, minimum: 0, maximum: 25 }
         max_score: { type: integer, minimum: 25, maximum: 25, description: Each component is capped at 25 in policy v1. }
+        band:
+          type: string
+          nullable: true
+          enum: [low, adequate, good]
+          description: Qualitative read of this component (M5 per-nutrient indicator), null only when score is null.
         evidence: { type: object, additionalProperties: true }
     MealBalance:
       type: object
@@ -2255,10 +2260,26 @@ components:
         reason: { type: string, maxLength: 300 }
         projected: { $ref: '#/components/schemas/ProjectedScenario' }
         requires_confirmation: { type: boolean, description: Always true; a fix never applies without user confirmation. }
+    AfterChangesScenario:
+      type: object
+      additionalProperties: false
+      description: >-
+        What the meal's totals and Meal Balance would become if every suggested fix were applied
+        together. `meal_balance.score` is null (per MealBalance's existing convention) whenever any
+        part of the combined scenario cannot be calculated from complete catalog data — it is never
+        estimated. Projected, not actual intake, per blueprint §7.
+      required: [totals, meal_balance, assumptions]
+      properties:
+        totals: { $ref: '#/components/schemas/NutrientTotals' }
+        meal_balance: { $ref: '#/components/schemas/MealBalance' }
+        assumptions:
+          type: array
+          maxItems: 10
+          items: { type: string, maxLength: 300 }
     PlateFixes:
       type: object
       additionalProperties: false
-      required: [scan_id, revision, fixes]
+      required: [scan_id, revision, fixes, after_changes]
       properties:
         scan_id: { type: string, format: uuid }
         revision: { type: integer, minimum: 1 }
@@ -2266,6 +2287,7 @@ components:
           type: array
           maxItems: 3
           items: { $ref: '#/components/schemas/PlateAction' }
+        after_changes: { $ref: '#/components/schemas/AfterChangesScenario' }
     PlateFixesResponse:
       type: object
       additionalProperties: false

@@ -427,7 +427,7 @@ totals, swaps) could not otherwise be built or exercised end to end.
   row named "NOURA synthetic test fixture" whose `license_notes` explicitly states it is **not a
   licensed source** and must never be used in production. Values are deliberately round,
   obviously-synthetic placeholder numbers (blueprint §7's "never invent nutrition data" bars
-  invented *production* data; a labelled, disclaimed development fixture used only to exercise the
+  invented _production_ data; a labelled, disclaimed development fixture used only to exercise the
   pipeline is the documented, approved resolution for this milestone, mirroring the M1
   `test_fixture` quality flag and its existing DB comment). The set deliberately covers: a vegan
   base (safe for every diet), dairy-only additions (vegetarian+), egg additions (eggatarian+),

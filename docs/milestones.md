@@ -3,12 +3,12 @@
 Status of each milestone from blueprint §16. A milestone counts as complete only when its
 acceptance gate passes. A schema that exists without the feature does not count.
 
-| Milestone     | Status                                                        |
-| ------------- | ------------------------------------------------------------- |
-| M1 Foundation  | Approved by the owner. PR #1 open with CI green                |
-| M2 Profile     | Implemented, awaiting review. PR #2 (draft) open with CI green |
-| M3 Diet plan   | **Implemented, awaiting review**                               |
-| M4 to M10      | Not started. Contract drafts only (`x-noura-status: planned`)  |
+| Milestone     | Status                                                         |
+| ------------- | -------------------------------------------------------------- |
+| M1 Foundation | Approved by the owner. PR #1 open with CI green                |
+| M2 Profile    | Implemented, awaiting review. PR #2 (draft) open with CI green |
+| M3 Diet plan  | **Implemented, awaiting review**                               |
+| M4 to M10     | Not started. Contract drafts only (`x-noura-status: planned`)  |
 
 ## M1 Foundation
 
@@ -229,27 +229,27 @@ invented nutrition data (see the catalog-data blocker and D-025 below).
 
 ### Acceptance checks (run 2026-10-02 in the development container)
 
-| Check                                   | Command                                                                | Result                                               |
-| ---------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------- |
-| Secret scan                              | `pnpm secrets:check`                                                     | Passed (650 files)                                     |
-| Lint and format                          | `pnpm lint`                                                              | Passed                                                 |
-| OpenAPI lint                             | `pnpm contracts:lint`                                                    | Valid. 14 pre-existing example warnings (same as M2)   |
-| Typecheck                                | `pnpm typecheck`                                                         | Passed (6 workspace projects)                          |
-| Contract, domain and ai unit tests       | `pnpm -r --filter './packages/*' run test`                               | Passed. contracts 13, domain 68, ai 5                  |
-| Migrations, RLS, grants, catalog seed    | `supabase`: `vitest run` against PostgreSQL 16                           | Passed. 39 tests (33 from M1/M2, 6 new)                |
-| API integration (diet routes)            | `apps/api`: `vitest run`                                                 | Passed. 76 tests (62 from M1/M2, 14 new)               |
-| Worker (handler, relay, runtime)         | `apps/worker`: `vitest run`                                              | Passed. 20 tests (12 from M1/M2, 8 new)                |
-| Flutter format, analyze and tests        | `dart format --line-length 120`, `flutter analyze`, `flutter test`      | Passed. No issues; 71 tests (62 from M1/M2, 9 new)     |
-| Flutter web build                        | `flutter build web --release`                                           | Passed                                                 |
-| Contract drift                           | `pnpm contracts:check`                                                  | Passed (after committing regenerated TS/Dart clients)  |
-| Idempotent generation under concurrency  | API test: duplicate `generateDietPlan` with the same key                | Passed (one `generation_requests` row)                 |
-| At-least-once worker processing          | Worker test: redelivery after "crash" between commit and terminal mark  | Passed (`already_generated`, no duplicate plan)        |
-| Honest infeasibility / catalog gate      | Worker tests: no eligible recipe for a slot; production catalog gate    | Passed (`plan_infeasible` / `catalog_unavailable`, no plan row created) |
-| Day totals reconcile exactly             | Domain test: summing already-rounded meals vs. re-deriving from grams   | Passed                                                 |
-| Flutter Android build                    | `flutter build apk --debug`                                             | **Not run here** (no Android SDK), same as M1/M2       |
-| Container image                          | `docker build .`                                                        | **Not run here.** No Docker daemon, same as M1/M2      |
-| Local Supabase stack                     | `supabase start && supabase db reset`                                   | **Not run here.** Plain-Postgres shim used (D-012)     |
-| Live worker + API processing a real request against a deployed Supabase project | Manual | **Not run.** Needs the owner's Supabase project |
+| Check                                                                           | Command                                                                | Result                                                                  |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Secret scan                                                                     | `pnpm secrets:check`                                                   | Passed (650 files)                                                      |
+| Lint and format                                                                 | `pnpm lint`                                                            | Passed                                                                  |
+| OpenAPI lint                                                                    | `pnpm contracts:lint`                                                  | Valid. 14 pre-existing example warnings (same as M2)                    |
+| Typecheck                                                                       | `pnpm typecheck`                                                       | Passed (6 workspace projects)                                           |
+| Contract, domain and ai unit tests                                              | `pnpm -r --filter './packages/*' run test`                             | Passed. contracts 13, domain 68, ai 5                                   |
+| Migrations, RLS, grants, catalog seed                                           | `supabase`: `vitest run` against PostgreSQL 16                         | Passed. 39 tests (33 from M1/M2, 6 new)                                 |
+| API integration (diet routes)                                                   | `apps/api`: `vitest run`                                               | Passed. 76 tests (62 from M1/M2, 14 new)                                |
+| Worker (handler, relay, runtime)                                                | `apps/worker`: `vitest run`                                            | Passed. 20 tests (12 from M1/M2, 8 new)                                 |
+| Flutter format, analyze and tests                                               | `dart format --line-length 120`, `flutter analyze`, `flutter test`     | Passed. No issues; 71 tests (62 from M1/M2, 9 new)                      |
+| Flutter web build                                                               | `flutter build web --release`                                          | Passed                                                                  |
+| Contract drift                                                                  | `pnpm contracts:check`                                                 | Passed (after committing regenerated TS/Dart clients)                   |
+| Idempotent generation under concurrency                                         | API test: duplicate `generateDietPlan` with the same key               | Passed (one `generation_requests` row)                                  |
+| At-least-once worker processing                                                 | Worker test: redelivery after "crash" between commit and terminal mark | Passed (`already_generated`, no duplicate plan)                         |
+| Honest infeasibility / catalog gate                                             | Worker tests: no eligible recipe for a slot; production catalog gate   | Passed (`plan_infeasible` / `catalog_unavailable`, no plan row created) |
+| Day totals reconcile exactly                                                    | Domain test: summing already-rounded meals vs. re-deriving from grams  | Passed                                                                  |
+| Flutter Android build                                                           | `flutter build apk --debug`                                            | **Not run here** (no Android SDK), same as M1/M2                        |
+| Container image                                                                 | `docker build .`                                                       | **Not run here.** No Docker daemon, same as M1/M2                       |
+| Local Supabase stack                                                            | `supabase start && supabase db reset`                                  | **Not run here.** Plain-Postgres shim used (D-012)                      |
+| Live worker + API processing a real request against a deployed Supabase project | Manual                                                                 | **Not run.** Needs the owner's Supabase project                         |
 
 How the M3 acceptance gate maps to tests:
 

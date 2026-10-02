@@ -116,6 +116,8 @@ describe('worker configuration', () => {
       AI_PROVIDER: 'gemini',
       AI_API_KEY: 'placeholder',
       AI_MODEL_ID: 'placeholder',
+      SUPABASE_URL: 'https://project.supabase.co',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder-service-role-key',
     });
     expect(config.migrate).toBe(false);
     expect(

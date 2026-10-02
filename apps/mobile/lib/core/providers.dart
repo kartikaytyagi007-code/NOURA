@@ -7,6 +7,7 @@ import 'auth/auth_repository.dart';
 import 'auth/auth_state.dart';
 import 'config/app_config.dart';
 import 'diet/diet_repository.dart';
+import 'meals/meal_scan_repository.dart';
 import 'profile/profile_repository.dart';
 import 'profile/session_profile.dart';
 
@@ -17,6 +18,9 @@ final profileRepositoryProvider = Provider<ProfileRepository>(
   (ref) => throw UnimplementedError('profileRepositoryProvider'),
 );
 final dietRepositoryProvider = Provider<DietRepository>((ref) => throw UnimplementedError('dietRepositoryProvider'));
+final mealScanRepositoryProvider = Provider<MealScanRepository>(
+  (ref) => throw UnimplementedError('mealScanRepositoryProvider'),
+);
 
 class AuthController extends Notifier<AuthStatus> {
   @override

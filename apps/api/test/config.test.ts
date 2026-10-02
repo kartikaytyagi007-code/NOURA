@@ -21,6 +21,7 @@ const production = {
   BILLING_PROVIDER: 'revenuecat',
   REVENUECAT_SECRET_API_KEY: 'placeholder-rc-key',
   REVENUECAT_WEBHOOK_AUTH: 'placeholder-webhook-authorization',
+  SUPABASE_SERVICE_ROLE_KEY: 'placeholder-service-role-key',
 };
 
 describe('loadConfig', () => {

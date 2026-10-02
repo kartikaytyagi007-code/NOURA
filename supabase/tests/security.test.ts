@@ -195,6 +195,93 @@ describe('owner isolation through RLS (user A vs user B)', () => {
   });
 });
 
+// M4: app.media_assets, app.meal_scans, app.meal_logs and app.meal_log_items are newly active
+// user-owned tables this milestone (AGENTS.md requires a negative ownership test for each).
+describe('M4 meal-scan/meal-log owner isolation (user A vs user B)', () => {
+  let userA: string;
+  let userB: string;
+  let mediaB: string;
+  let scanB: string;
+  let logB: string;
+
+  beforeAll(async () => {
+    userA = await createAuthUser();
+    userB = await createAuthUser();
+    mediaB = randomUUID();
+    scanB = randomUUID();
+    logB = randomUUID();
+    await asOwner(async (c) => {
+      await c.query(
+        `insert into app.media_assets (id, user_id, purpose, bucket, object_path, declared_mime, status)
+         values ($1, $2, 'meal', 'meal-images', $3, 'image/png', 'verified')`,
+        [mediaB, userB, `${userB}/${mediaB}.png`],
+      );
+      await c.query(
+        `insert into app.meal_scans (id, user_id, media_asset_id, status) values ($1, $2, $3, 'needs_confirmation')`,
+        [scanB, userB, mediaB],
+      );
+      await c.query(
+        `insert into app.meal_logs (id, user_id, client_id, consumed_at, local_date, timezone, slot, totals_snapshot)
+         values ($1, $2, gen_random_uuid(), now(), current_date, 'UTC', 'lunch', '{}')`,
+        [logB, userB],
+      );
+    });
+  });
+
+  it('cannot read user B media, meal scans or meal logs even filtering for them explicitly', async () => {
+    const result = await asRole('noura_api', userA, async (c) => {
+      const media = await c.query('select 1 from app.media_assets where id = $1', [mediaB]);
+      const scans = await c.query('select 1 from app.meal_scans where id = $1', [scanB]);
+      const logs = await c.query('select 1 from app.meal_logs where id = $1', [logB]);
+      return { media: media.rowCount, scans: scans.rowCount, logs: logs.rowCount };
+    });
+    expect(result).toEqual({ media: 0, scans: 0, logs: 0 });
+  });
+
+  it('cannot update or delete user B media, meal scans or meal logs', async () => {
+    const result = await asRole('noura_api', userA, async (c) => {
+      const media = await c.query("update app.media_assets set status = 'deleted' where id = $1", [
+        mediaB,
+      ]);
+      const scans = await c.query("update app.meal_scans set status = 'cancelled' where id = $1", [
+        scanB,
+      ]);
+      const logs = await c.query('delete from app.meal_logs where id = $1', [logB]);
+      return { media: media.rowCount, scans: scans.rowCount, logs: logs.rowCount };
+    });
+    expect(result).toEqual({ media: 0, scans: 0, logs: 0 });
+    const stillThere = await adminPool.query('select id from app.meal_logs where id = $1', [logB]);
+    expect(stillThere.rowCount).toBe(1);
+  });
+
+  it('cannot insert a meal scan or meal log owned by user B (client-supplied user_id is rejected)', async () => {
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query(
+          "insert into app.meal_scans (user_id, media_asset_id, status) values ($1, $2, 'queued')",
+          [userB, mediaB],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query(
+          `insert into app.meal_logs (user_id, client_id, consumed_at, local_date, timezone, slot, totals_snapshot)
+           values ($1, gen_random_uuid(), now(), current_date, 'UTC', 'dinner', '{}')`,
+          [userB],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('applies the same isolation to the worker role for meal scans', async () => {
+    const { rowCount } = await asRole('noura_worker', userA, (c) =>
+      c.query('select 1 from app.meal_scans where id = $1', [scanB]),
+    );
+    expect(rowCount).toBe(0);
+  });
+});
+
 describe('child rows cannot attach to another user parent', () => {
   it('rejects a meal_log_item for user A pointing at user B meal_log', async () => {
     const userA = await createAuthUser();

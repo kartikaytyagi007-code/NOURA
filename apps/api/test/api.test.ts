@@ -352,7 +352,8 @@ describe('contract parity', () => {
     const token = await signToken(keys, { sub: await createAuthUser() });
     const res = await ctx.app.inject({
       method: 'POST',
-      url: '/v1/meal-scans',
+      // Still x-noura-status: planned (M5): plate fixes are explicitly out of M4 scope.
+      url: '/v1/meal-scans/00000000-0000-0000-0000-000000000000/plate-fixes',
       headers: { authorization: `Bearer ${token}` },
       payload: {},
     });

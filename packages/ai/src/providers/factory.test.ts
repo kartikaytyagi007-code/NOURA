@@ -39,11 +39,22 @@ describe('createAiProvider', () => {
     });
   });
 
-  it('never returns nutrition-like data from the mock recognizer', async () => {
+  it('labels mock recognition output as mock and never includes a nutrition value', async () => {
+    const provider = createAiProvider({ appEnv: 'test', provider: 'mock' });
+    const result = await provider.recognizeMeal(
+      { bytes: new Uint8Array([1, 2, 3]), mime: 'image/jpeg' },
+      {},
+    );
+    expect(result.meta.mock).toBe(true);
+    // The mock returns food labels and gram estimates (D-026) but never a kcal/macro number.
+    expect(JSON.stringify(result.output)).not.toMatch(/kcal|protein_g|carbohydrate_g|fat_g/);
+  });
+
+  it('can simulate a non-food photo for the mock recognizer', async () => {
     const provider = createAiProvider({ appEnv: 'test', provider: 'mock' });
     const { output } = await provider.recognizeMeal(
-      { bytes: new Uint8Array(), mime: 'image/jpeg' },
-      {},
+      { bytes: new Uint8Array([9, 9, 9]), mime: 'image/jpeg' },
+      { mock_scenario: 'non_food' },
     );
     expect(output).toMatchObject({ image_is_food: false, items: [] });
   });

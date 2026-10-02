@@ -14,6 +14,7 @@ function food(partial: Partial<CatalogFood> & Pick<CatalogFood, 'id' | 'name'>):
     allergen_coverage: 'complete',
     food_group_tags: [],
     quality_flag: 'test_fixture',
+    serving_conversions: [],
     ...partial,
   };
 }

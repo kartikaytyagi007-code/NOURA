@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { z } from 'zod';
 
 const appEnv = z.enum(['development', 'test', 'staging', 'production']);
@@ -28,6 +31,12 @@ const schema = z
     AI_PROVIDER: z.enum(['mock', 'gemini']).optional(),
     AI_API_KEY: z.string().min(1).optional(),
     AI_MODEL_ID: z.string().min(1).optional(),
+
+    SUPABASE_URL: z.url().optional(),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+    MEDIA_STORAGE_DRIVER: z.enum(['local', 'supabase']).optional(),
+    DEV_STORAGE_DIR: z.string().min(1).optional(),
+    DEV_STORAGE_SIGNING_SECRET: z.string().min(1).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.APP_ENV !== 'staging' && env.APP_ENV !== 'production') return;
@@ -44,6 +53,19 @@ const schema = z
         message: 'AI_API_KEY and AI_MODEL_ID are required',
       });
     }
+    if (env.MEDIA_STORAGE_DRIVER === 'local') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['MEDIA_STORAGE_DRIVER'],
+        message: `local media storage is not allowed when APP_ENV=${env.APP_ENV}`,
+      });
+    } else if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SUPABASE_SERVICE_ROLE_KEY'],
+        message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for meal-scan storage',
+      });
+    }
   });
 
 export interface WorkerConfig {
@@ -58,6 +80,13 @@ export interface WorkerConfig {
   concurrency: number;
   relayIntervalMs: number;
   ai: { provider: 'mock' | 'gemini'; apiKey?: string | undefined; modelId?: string | undefined };
+  media: {
+    driver: 'local' | 'supabase' | undefined;
+    supabaseUrl: string;
+    serviceRoleKey?: string | undefined;
+    devStorageDir: string;
+    devStorageSigningSecret: string;
+  };
 }
 
 export class ConfigError extends Error {
@@ -88,5 +117,12 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     concurrency: e.WORKER_CONCURRENCY,
     relayIntervalMs: e.WORKER_RELAY_INTERVAL_MS,
     ai: { provider: e.AI_PROVIDER ?? 'mock', apiKey: e.AI_API_KEY, modelId: e.AI_MODEL_ID },
+    media: {
+      driver: e.MEDIA_STORAGE_DRIVER,
+      supabaseUrl: e.SUPABASE_URL ?? 'https://invalid.local',
+      serviceRoleKey: e.SUPABASE_SERVICE_ROLE_KEY,
+      devStorageDir: e.DEV_STORAGE_DIR ?? join(tmpdir(), `noura-dev-storage-${randomUUID()}`),
+      devStorageSigningSecret: e.DEV_STORAGE_SIGNING_SECRET ?? 'dev-only-insecure-signing-secret',
+    },
   };
 }

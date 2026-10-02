@@ -9,6 +9,7 @@ import 'core/auth/mock_auth_repository.dart';
 import 'core/auth/supabase_auth_repository.dart';
 import 'core/config/app_config.dart';
 import 'core/diet/diet_repository.dart';
+import 'core/meals/meal_scan_repository.dart';
 import 'core/profile/profile_repository.dart';
 import 'core/providers.dart';
 
@@ -24,12 +25,14 @@ Future<void> main() async {
   final AuthRepository auth;
   final ProfileRepository profiles;
   final DietRepository diet;
+  final MealScanRepository mealScan;
   if (config.useMocks) {
     // Explicit development mocks: no network, no real accounts. validate() refuses this outside
     // development debug builds, and the app shows a persistent banner while it is active.
     auth = MockAuthRepository();
     profiles = MockProfileRepository();
     diet = MockDietRepository();
+    mealScan = MockMealScanRepository();
   } else {
     await Supabase.initialize(
       url: config.supabaseUrl,
@@ -40,6 +43,7 @@ Future<void> main() async {
     final apiClient = buildApiClient(buildDio(baseUrl: config.apiBaseUrl, auth: auth));
     profiles = ApiProfileRepository(apiClient);
     diet = ApiDietRepository(apiClient);
+    mealScan = ApiMealScanRepository(apiClient);
   }
 
   runApp(
@@ -49,6 +53,7 @@ Future<void> main() async {
         authRepositoryProvider.overrideWithValue(auth),
         profileRepositoryProvider.overrideWithValue(profiles),
         dietRepositoryProvider.overrideWithValue(diet),
+        mealScanRepositoryProvider.overrideWithValue(mealScan),
       ],
       child: const NouraApp(),
     ),

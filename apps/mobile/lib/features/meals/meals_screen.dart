@@ -24,10 +24,20 @@ class MealsScreen extends StatelessWidget {
             onTap: () => context.push(Routes.dietPlan),
           ),
         ),
+        Card(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(NSpace.sm),
+            leading: const Icon(Icons.camera_alt_outlined),
+            title: const Text('Scan a meal'),
+            subtitle: const Text('Photograph a meal to identify foods and log it, with your review.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(Routes.mealScan),
+          ),
+        ),
         const FeaturePlaceholder(
-          title: 'Diary and manual entry',
-          milestone: 'M4',
-          description: 'Log meals by scan or food search.',
+          title: 'Food search',
+          milestone: 'planned',
+          description: 'Log a meal by searching the catalog directly, without a photo.',
           icon: Icons.menu_book_outlined,
         ),
         const FeaturePlaceholder(

@@ -297,3 +297,134 @@ onto the M3 catalog (and handling items the catalog cannot match, honestly, not 
 nutrition), and manual meal logs with edit/delete. `app.meal_scans`, `app.meal_logs` and
 `app.meal_log_items` already exist from M1; `POST /v1/meal-logs` and friends are drafted in the
 contract as `x-noura-status: planned`, `x-noura-milestone: M4`. Not started.
+
+## M4 Meal photo scanning
+
+**Ticket.** Deliver private photo upload with ownership checks and a retention/deletion policy, an
+async recognition job on the existing `generation_requests`/worker pipeline, a replaceable
+server-side AI provider adapter (mock-first per D-010, failing closed without a real provider),
+schema-validated recognition resolved against the M3 catalog deterministically (never inventing
+nutrition), honest "unmatched" surfacing for catalog-missing items, a mandatory user review/edit
+step before anything is saved, and the Flutter camera/gallery capture → upload → processing →
+review → correction → save flow — end to end, with no invented data (see D-026).
+
+### Delivered
+
+- **No real AI vision provider available in this environment (flagged in the ticket, not a
+  blocker).** `MockAiProvider.recognizeMeal` is extended with a deterministic, hash-keyed scenario
+  system (D-026) and is what the full pipeline is actually exercised against end to end; it still
+  never returns a nutrition value, and `createAiProvider` is unchanged in refusing to start in
+  staging/production without a real provider and key (D-010).
+- **Media storage (D-026):** `packages/domain/src/media/storage.ts` — a `MediaStorage` interface
+  with `LocalMediaStorage` (development/test: local disk behind the API's own signed
+  `/dev-storage/*` route) and `SupabaseMediaStorage` (a REST adapter, not exercised against a live
+  project here) implementations; `createMediaStorage` fails closed exactly like `createAiProvider`.
+  `packages/domain/src/media/image.ts` hand-sniffs real PNG/JPEG/WEBP dimensions/format from bytes
+  (no new binary dependency) so a mislabelled or corrupt upload is rejected before it ever reaches
+  the AI provider, and strips JPEG metadata before the provider call.
+- **Catalog matching and recognition validation:** `packages/domain/src/catalog/matching.ts` (simple
+  exact/prefix/substring matching against the real M3 catalog, attached server-side — never trusted
+  from the provider); `packages/domain/src/meals/recognition-schema.ts` (a strict, versioned zod
+  schema for the provider's raw output; anything malformed becomes a safe job failure, never a
+  crash); `packages/domain/src/meals/review.ts` (resolves confirmed items against the catalog by id
+  or exact label match; unmatched items get `nutrients: null, uncertainty: 'high'` and are excluded,
+  honestly, from the meal's totals); `packages/domain/src/meals/balance.ts` (Meal Balance v1, a
+  provisional, explainable, non-medical heuristic score, null when coverage is incomplete).
+- **Worker:** `apps/worker/src/handlers/meal-scan-analyze.ts`, registered on the new
+  `meal-scan.analyze` queue (`GENERATION_REQUEST_QUEUES.meal_scan`). Mirrors
+  `diet-plan-generate.ts`'s idempotency precedent: short-circuits on an already-terminal
+  `generation_requests` row, and separately on an already-resolved `meal_scans` row (the
+  crash-recovery case), each covered by its own test; records `image_missing`, `provider_unavailable`,
+  `invalid_provider_response` or `not_food` as an honest, safe failure rather than ever fabricating a
+  recognition.
+- **API:** `apps/api/src/modules/media` (`POST /v1/media/upload-slots`, `POST /v1/media/{id}/complete`,
+  `GET /v1/media/{id}/download`, `DELETE /v1/media/{id}`) and `apps/api/src/modules/meals`
+  (`POST /v1/meal-scans`, `GET /v1/meal-scans/{id}`, `PUT /v1/meal-scans/{id}/confirmed-items`,
+  `POST /v1/meal-logs`, `GET /v1/meal-logs`, `PATCH /v1/meal-logs/{id}`, `DELETE /v1/meal-logs/{id}`).
+  Duplicate `createMealScan` submissions for the same media dedup onto the same job; a provisional
+  daily scan quota (`MEAL_SCAN_DAILY_QUOTA = 20`, D-026) reuses `usage_reservations`; all mutations
+  carry `Idempotency-Key`, and revision-bearing writes carry `expected_revision` (409
+  `REVISION_CONFLICT` on a stale confirm/patch/delete, D-022's convention).
+- **Contracts:** `createUploadSlot`, `completeUpload`, `getMediaDownload`, `deleteMedia`,
+  `createMealScan`, `getMealScan`, `confirmMealScanItems`, `createMealLog`, `listMealLogs`,
+  `patchMealLog`, `deleteMealLog` flipped to `x-noura-status: implemented`; TS and Dart clients
+  regenerated and committed. `createPlateFixes` correctly remains `planned` (M5).
+- **Database:** no new migration was needed — M1's `20261001000500_media_scans_logs.sql` already
+  defines `app.media_assets`/`app.meal_scans`/`app.meal_logs`/`app.meal_log_items` with RLS and
+  owner-path constraints, and `20261001000800_storage_and_grants.sql` already grants
+  `noura_api`/`noura_worker`. A negative ownership test for all three tables was added to
+  `supabase/tests/security.test.ts` (select/update/delete/insert-as-another-user all denied), per
+  AGENTS.md's requirement for every newly-active user-owned table.
+- **Flutter:** `apps/mobile/lib/core/meals/` (`MealScanRepository`/`ApiMealScanRepository`/
+  `MockMealScanRepository`, `MealScanController` as an explicit multi-step state machine) and
+  `apps/mobile/lib/features/meals/meal_scan_screen.dart` — capture (camera/gallery via
+  `image_picker`), uploading, processing (polling), review/correction (editable grams, remove,
+  add-missed-item, unmatched-item disclosure), save, and labelled error states (non-food, provider
+  failure, timeout/offline), reached from Meals → "Scan a meal" (D-023's component system; no Stitch
+  screens exist for this feature). Android/iOS camera permissions added.
+- **Docs:** decision D-026; this M4 section.
+
+### Acceptance checks (run 2026-10-02 in the development container)
+
+| Check                                               | Command                                                                                                                                                           | Result                                                                           |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Secret scan                                         | `pnpm secrets:check`                                                                                                                                              | Passed (678 files)                                                               |
+| Lint and format                                     | `pnpm lint`                                                                                                                                                       | Passed                                                                           |
+| Typecheck                                           | `pnpm typecheck`                                                                                                                                                  | Passed (6 workspace projects)                                                    |
+| Contract, domain and ai unit tests                  | `pnpm -r --filter './packages/*' run test`                                                                                                                        | Passed. contracts 13, domain 112, ai 6                                           |
+| Migrations, RLS, grants, M4 owner-isolation         | `supabase`: `vitest run` against PostgreSQL 16                                                                                                                    | Passed. 43 tests (39 from M1-M3, 4 new)                                          |
+| API integration (media, meal-scan, meal-log routes) | `apps/api`: `vitest run`                                                                                                                                          | Passed. 89 tests (76 from M1-M3, 13 new)                                         |
+| Worker (meal-scan handler, retries, crash recovery) | `apps/worker`: `vitest run`                                                                                                                                       | Passed. 28 tests (20 from M1-M3, 8 new)                                          |
+| Flutter format, analyze and tests                   | `dart format --line-length 120`, `flutter analyze`, `flutter test`                                                                                                | Passed. No issues; 82 tests (71 from M1-M3, 11 new)                              |
+| Flutter web build                                   | `flutter build web --release`                                                                                                                                     | Not re-run this milestone (unchanged toolchain from M3)                          |
+| Contract drift                                      | `pnpm contracts:check`                                                                                                                                            | Passed (after committing regenerated TS/Dart clients)                            |
+| Cross-owner media/scan/log access denied            | API tests: download/complete/delete a media asset owned by another user; read/confirm a scan owned by another user; read/patch/delete a log owned by another user | Passed (404 in every case)                                                       |
+| Non-food / provider failure / image-missing handled | Worker tests: `non_food` recognition, simulated provider error, deleted storage object before analysis                                                            | Passed (`not_food`, `provider_unavailable`, `image_missing`, never a crash)      |
+| No log before confirmation                          | API test: `createMealLog` requires items the caller confirmed; `confirmMealScanItems` is a distinct, required step before the scan reaches `ready`                | Passed                                                                           |
+| Honest unmatched-item surfacing                     | API test: an item with no catalog match keeps `nutrients: null`, `uncertainty: 'high'`, and `coverage.complete = false` on the total                              | Passed                                                                           |
+| Duplicate scan submission is safe                   | API test: two `createMealScan` calls for the same media id return the same `scan_id`/`job_id`                                                                     | Passed                                                                           |
+| At-least-once worker processing / crash recovery    | Worker tests: redelivery after the request is already terminal; redelivery after the scan resolved but the request row had not yet been marked terminal           | Passed (`already_terminal` / `already_processed`, recognition never overwritten) |
+| Container image                                     | `docker build .`                                                                                                                                                  | **Not run here.** No Docker daemon, unchanged from M1-M3                         |
+| Local Supabase stack                                | `supabase start && supabase db reset`                                                                                                                             | **Not run here.** Plain-Postgres shim used (D-012)                               |
+| Live worker + a real AI vision provider             | Manual                                                                                                                                                            | **Not run.** No real provider key is available in this environment (D-026)       |
+
+How the M4 acceptance gate maps to tests:
+
+- **Non-food/unknown/provider failure handled:** worker tests cover a `non_food` recognition result,
+  a simulated provider exception, an invalid (schema-failing) provider response, and a deleted
+  storage object — each becomes a safe, specific job failure, never a crash or a fabricated result.
+- **No log before confirmation:** API tests exercise the full scan → review → `confirmMealScanItems`
+  → `createMealLog` sequence and assert a log cannot be created by skipping confirmation; a stale
+  `expected_revision` on confirm is rejected (409).
+- **Cross-owner media denied:** API tests attempt to download, complete, delete another user's media
+  asset and to read/confirm another user's scan and read/patch/delete another user's log, all
+  expecting 404; a DB-level negative ownership test additionally proves RLS denies these at the
+  database layer even bypassing the API.
+
+### Known limitations and release gates
+
+- **No real AI vision provider (open, the central M4 limitation, flagged in the ticket).** Only the
+  extended mock provider exists; recognition quality, prompt design, cost and provider-specific
+  error handling cannot be evaluated until a real provider and key are available (D-010, D-026).
+- **No licensed nutrition/recipe catalog (open, carried from M3).** Recognized items still resolve
+  against the synthetic `test_fixture` catalog (D-025); this was already the production-blocking gap
+  and M4 does not change it.
+- **Scheduled media purge (open).** `deleteMedia` is user-invokable today; a background job to
+  actually enforce the 30-day retention default has not been built (D-026).
+- **Provisional daily scan quota (provisional).** `MEAL_SCAN_DAILY_QUOTA = 20` is an engineering
+  placeholder, not a reviewed entitlement (D-026); real quotas are M10 billing scope.
+- **Catalog matching (provisional, same caveat as D-025's dislike filter).** Exact/prefix/substring
+  string matching, not NLP; a release-gate-quality item, not a blocker for this milestone.
+- **`SupabaseMediaStorage` unverified (open).** The real adapter has not been exercised against a
+  live Supabase Storage project in this environment; only `LocalMediaStorage` (development/test) was
+  exercised end to end.
+- **No Stitch screens for this feature.** The capture/review/correction UI uses the existing
+  component system (D-014/D-023), as with M3's diet-plan screen.
+- Android/iOS builds, the container image and Google/Apple sign-in remain unverified here, unchanged
+  from M1-M3.
+
+### M5 hand-off
+
+Versioned Meal Balance, evidence and keep/reduce/add suggestions with a scenario calculator
+(blueprint §16, `createPlateFixes`, already drafted in the contract as `x-noura-status: planned`,
+`x-noura-milestone: M5`). Not started.

@@ -26,7 +26,7 @@ describe('OpenAPI contract structure', () => {
     }
   });
 
-  it('implements exactly the M1, M2 and M3 operations, each tagged with its milestone', () => {
+  it('implements exactly the M1-M4 operations, each tagged with its milestone', () => {
     const implemented = Object.fromEntries(
       ops.filter((o) => o.status === 'implemented').map((o) => [o.operationId, o.milestone]),
     );
@@ -44,6 +44,17 @@ describe('OpenAPI contract structure', () => {
       getCurrentDietPlan: 'M3',
       getSwapOptions: 'M3',
       replacePlanMeal: 'M3',
+      createUploadSlot: 'M4',
+      completeUpload: 'M4',
+      getMediaDownload: 'M4',
+      deleteMedia: 'M4',
+      createMealScan: 'M4',
+      getMealScan: 'M4',
+      confirmMealScanItems: 'M4',
+      createMealLog: 'M4',
+      listMealLogs: 'M4',
+      patchMealLog: 'M4',
+      deleteMealLog: 'M4',
     });
   });
 

@@ -25,6 +25,9 @@ abstract final class Routes {
   static const coach = '/coach';
   static const workout = '/workout';
   static const progress = '/progress';
+  static const weightHistory = '/progress/weight-history';
+  static const progressPhotos = '/progress/photos';
+  static const progressCompare = '/progress/compare';
 
   /// Screens reachable without a session.
   static bool isPublic(String location) => location == welcome || location.startsWith('/auth/');

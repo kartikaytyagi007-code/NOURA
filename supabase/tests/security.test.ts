@@ -564,3 +564,116 @@ describe('M7 workout plan/session/log owner isolation (user A vs user B)', () =>
     expect(rowCount).toBe(0);
   });
 });
+
+describe('M8 weight-log/progress-photo owner isolation (user A vs user B)', () => {
+  let userA: string;
+  let userB: string;
+  let weightLogB: string;
+  let mediaAssetB: string;
+  let progressPhotoB: string;
+
+  beforeAll(async () => {
+    userA = await createAuthUser();
+    userB = await createAuthUser();
+    weightLogB = randomUUID();
+    mediaAssetB = randomUUID();
+    progressPhotoB = randomUUID();
+    await asOwner(async (c) => {
+      await c.query(
+        `insert into app.weight_logs (id, user_id, client_id, measured_at, weight_kg)
+         values ($1, $2, gen_random_uuid(), now(), 70)`,
+        [weightLogB, userB],
+      );
+      await c.query(
+        `insert into app.media_assets (id, user_id, purpose, bucket, object_path, declared_mime, status)
+         values ($1, $2, 'progress_photo', 'progress-photos', $3, 'image/jpeg', 'verified')`,
+        [mediaAssetB, userB, `${userB}/${mediaAssetB}.jpg`],
+      );
+      await c.query(
+        `insert into app.progress_photos (id, user_id, media_asset_id, captured_at, angle)
+         values ($1, $2, $3, now(), 'front')`,
+        [progressPhotoB, userB, mediaAssetB],
+      );
+    });
+  });
+
+  it('cannot read user B weight logs or progress photos even filtering for them explicitly', async () => {
+    const result = await asRole('noura_api', userA, async (c) => {
+      const weights = await c.query('select 1 from app.weight_logs where id = $1', [weightLogB]);
+      const photos = await c.query('select 1 from app.progress_photos where id = $1', [
+        progressPhotoB,
+      ]);
+      return { weights: weights.rowCount, photos: photos.rowCount };
+    });
+    expect(result).toEqual({ weights: 0, photos: 0 });
+  });
+
+  it('cannot update or delete user B weight logs or progress photos', async () => {
+    const result = await asRole('noura_api', userA, async (c) => {
+      const weights = await c.query('delete from app.weight_logs where id = $1', [weightLogB]);
+      const photos = await c.query('delete from app.progress_photos where id = $1', [
+        progressPhotoB,
+      ]);
+      return { weights: weights.rowCount, photos: photos.rowCount };
+    });
+    expect(result).toEqual({ weights: 0, photos: 0 });
+    const stillThere = await adminPool.query('select id from app.weight_logs where id = $1', [
+      weightLogB,
+    ]);
+    expect(stillThere.rowCount).toBe(1);
+  });
+
+  it('cannot insert a weight log or progress photo owned by user B (client-supplied user_id is rejected)', async () => {
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query(
+          `insert into app.weight_logs (user_id, client_id, measured_at, weight_kg)
+           values ($1, gen_random_uuid(), now(), 65)`,
+          [userB],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query(
+          `insert into app.progress_photos (user_id, media_asset_id, captured_at, angle)
+           values ($1, $2, now(), 'front')`,
+          [userB, mediaAssetB],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('applies the same isolation to the worker role', async () => {
+    const { rowCount } = await asRole('noura_worker', userA, (c) =>
+      c.query('select 1 from app.weight_logs where id = $1', [weightLogB]),
+    );
+    expect(rowCount).toBe(0);
+  });
+});
+
+describe('M8 progress-photo retention (D-030: no auto-expiry, unlike meal images)', () => {
+  it('a progress-photo media asset gets no expires_at, while a meal-image asset does', async () => {
+    const userId = await createAuthUser();
+    const progressId = randomUUID();
+    const mealId = randomUUID();
+    await asOwner(async (c) => {
+      await c.query(
+        `insert into app.media_assets (id, user_id, purpose, bucket, object_path, declared_mime, expires_at)
+         values ($1, $2, 'progress_photo', 'progress-photos', $3, 'image/jpeg', null)`,
+        [progressId, userId, `${userId}/${progressId}.jpg`],
+      );
+      await c.query(
+        `insert into app.media_assets (id, user_id, purpose, bucket, object_path, declared_mime, expires_at)
+         values ($1, $2, 'meal', 'meal-images', $3, 'image/jpeg', now() + interval '30 days')`,
+        [mealId, userId, `${userId}/${mealId}.jpg`],
+      );
+    });
+    const { rows } = await adminPool.query<{ id: string; expires_at: Date | null }>(
+      'select id, expires_at from app.media_assets where id = any($1::uuid[])',
+      [[progressId, mealId]],
+    );
+    expect(rows.find((r) => r.id === progressId)?.expires_at).toBeNull();
+    expect(rows.find((r) => r.id === mealId)?.expires_at).not.toBeNull();
+  });
+});

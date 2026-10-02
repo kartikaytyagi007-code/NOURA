@@ -17,6 +17,12 @@ const BUCKET_BY_PURPOSE: Record<string, string> = {
 const MAX_BYTES = 10 * 1024 * 1024;
 /** Images are kept only as long as needed to support recognition and review (docs/decisions.md D-026). */
 const RETENTION_DAYS = 30;
+/**
+ * Progress photos are retained until the user deletes them, not auto-expired like meal images — the
+ * blueprint states this explicitly ("progress photos until user deletion", §14), distinct from its
+ * 90-day default for other media. See docs/decisions.md D-030.
+ */
+const PURPOSES_WITH_NO_AUTO_EXPIRY = new Set(['progress_photo']);
 
 function extFor(mime: string): string {
   if (mime === 'image/png') return 'png';
@@ -71,10 +77,12 @@ export async function createUploadSlot(
   // (`media_assets_owner_path`) requires the path to embed the row's own id from the first insert.
   const mediaId = randomUUID();
   const objectPath = `${userId}/${mediaId}.${extFor(body.mime)}`;
+  const retentionDays = PURPOSES_WITH_NO_AUTO_EXPIRY.has(body.purpose) ? null : RETENTION_DAYS;
   await client.query(
     `insert into app.media_assets (id, user_id, purpose, bucket, object_path, declared_mime, status, expires_at)
-     values ($1, $2, $3, $4, $5, $6, 'awaiting_upload', now() + make_interval(days => $7))`,
-    [mediaId, userId, body.purpose, bucket, objectPath, body.mime, RETENTION_DAYS],
+     values ($1, $2, $3, $4, $5, $6, 'awaiting_upload',
+             case when $7::int is null then null else now() + make_interval(days => $7) end)`,
+    [mediaId, userId, body.purpose, bucket, objectPath, body.mime, retentionDays],
   );
 
   const slot = await storage.createUploadUrl(bucket, objectPath, body.mime);

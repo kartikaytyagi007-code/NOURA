@@ -29,6 +29,7 @@ lib/src/model/account_export.dart
 lib/src/model/action_proposal.dart
 lib/src/model/action_proposal_response.dart
 lib/src/model/activity_band.dart
+lib/src/model/adherence_summary.dart
 lib/src/model/after_changes_scenario.dart
 lib/src/model/allergy_tag.dart
 lib/src/model/analyzed_item.dart

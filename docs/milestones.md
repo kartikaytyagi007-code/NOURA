@@ -743,3 +743,129 @@ plan adaptation are in scope.
 ### M8 hand-off
 
 Not scoped by this milestone; see the M8 ticket in a future update to this file.
+
+## M8 Basic Progress Tracking
+
+**Ticket.** Weight history with starting/current/goal weight, read-only meal-plan-adherence and
+completed-workout summaries over already-recorded app data (never inferring progress from missing
+data or claiming causation), private progress-photo upload/storage with ownership checks and deletion,
+a simple two-date side-by-side comparison view with no physique/body-fat/medical analysis, clear
+empty/loading/error/data-unavailable states, and tests for ownership, validation, summary honesty,
+photo access/deletion and timezone handling (see D-030).
+
+### Delivered
+
+- **No new migration needed.** `app.weight_logs` and `app.progress_photos`
+  (`supabase/migrations/20261001000500_media_scans_logs.sql`) already existed from M1, RLS-enabled and
+  granted, unused. `app.media_assets` already carried the `progress_photo` purpose/bucket
+  discriminator. The OpenAPI operations and schemas for all of `/v1/weight-logs`,
+  `/v1/progress-photos` and `/v1/progress` were likewise already drafted as `planned`.
+- **Domain (`packages/domain/src/progress/`, new):** `weight.ts`'s `validateWeightEntry` (realistic
+  20–400 kg range, no future-dated entries beyond a small clock-skew allowance) and `adherence.ts`'s
+  `buildAdherenceSummary`/`countElapsed` — the honesty mechanism that returns `{plan_active: false,
+planned: null, logged: null}` whenever no plan is active, so a missing plan is never rendered as a
+  real "0 of 0" (D-030). Both are pure and unit-tested directly.
+- **API (`apps/api/src/modules/progress/`, new):** `listWeightLogs`/`createWeightLog`
+  (idempotent by `client_id`)/`deleteWeightLog`, `listProgressPhotos`/`createProgressPhoto`
+  (idempotent by `media_id`, requires the media to be the caller's own verified `progress_photo`
+  upload)/`deleteProgressPhoto` (deletes the reference and the backing media object via M4's
+  `deleteMedia`, actually revoking download access), and `getProgress` — starting/current/goal weight,
+  30-day weight points, and `diet_adherence`/`workout_adherence` computed only over already-elapsed
+  plan days/sessions in the user's own timezone (`packages/domain/src/time/timezone.ts`, reused from
+  M6). All mutations run through `withIdempotency`/`withUserTransaction`, deriving the user only from
+  the verified token.
+- **Progress-photo retention fixed to match the blueprint (`apps/api/src/modules/media/service.ts`).**
+  The blueprint specifies progress photos are retained "until user deletion," distinct from meal
+  images' 90-day figure. `createUploadSlot` previously applied a flat 30-day `expires_at` to every
+  purpose; it now omits `expires_at` entirely for `progress_photo` uploads (`PURPOSES_WITH_NO_AUTO_EXPIRY`),
+  while meal-image uploads are unchanged. See D-030 for the full reasoning, including the carried-over
+  M4 gap this does not attempt to fix (meal images' own 30-vs-90-day mismatch).
+- **Contracts:** `listWeightLogs`, `createWeightLog`, `deleteWeightLog`, `listProgressPhotos`,
+  `createProgressPhoto`, `deleteProgressPhoto`, `getProgress` flipped to `x-noura-status: implemented`.
+  `Progress` gained `starting_weight_kg`, `current_weight_kg`, `goal_weight_kg`, `diet_adherence` and
+  `workout_adherence` (new `AdherenceSummary` schema), additively. TS and Dart clients regenerated and
+  committed.
+- **Flutter (`apps/mobile/lib/core/progress/`, `apps/mobile/lib/features/progress/`, new):**
+  `ProgressScreen` (starting/current/goal weight, both adherence cards with their no-plan message,
+  links to history/photos/comparison), `WeightHistoryScreen` (list, add-entry dialog, swipe-to-delete),
+  `ProgressPhotosScreen` (camera/gallery capture via `image_picker`, grid with per-photo signed-URL
+  image loading and delete confirmation) and `PhotoComparisonScreen` (two date dropdowns, side-by-side
+  images, an explicit "No photo for this date" state) — each with its own loading/empty/error states
+  per D-023, reached from the previously-placeholder Progress tab. `MockProgressRepository` provides
+  clearly `(mock)`-labelled development data. No Stitch screens exist for this feature (same precedent
+  as D-026/D-027/D-028/D-029), so the existing component system is used.
+- **Database:** no new migration; a negative-ownership test for `weight_logs`/`progress_photos` was
+  added to `supabase/tests/security.test.ts` (select/update/delete/insert-as-another-user all denied),
+  per AGENTS.md's requirement for every newly-active user-owned table, plus a dedicated test asserting
+  the retention difference (`expires_at is null` for a progress-photo media asset, not null for meal).
+- **Docs:** decision D-030; this M8 section.
+
+### Acceptance checks (run 2026-10-02 in the development container)
+
+| Check                                                              | Command                                                                                                                                                                                              | Result                                                                  |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Secret scan                                                        | `pnpm secrets:check`                                                                                                                                                                                 | Passed (765 files)                                                      |
+| Lint and format                                                    | `pnpm lint`                                                                                                                                                                                          | Passed                                                                  |
+| OpenAPI lint                                                       | `pnpm contracts:lint`                                                                                                                                                                                | Valid. 14 pre-existing example warnings (same as M1-M7)                 |
+| Typecheck                                                          | `pnpm typecheck`                                                                                                                                                                                     | Passed (6 workspace projects)                                           |
+| Contract, domain and ai unit tests                                 | `pnpm -r --filter './packages/*' run test`                                                                                                                                                           | Passed. contracts 13, domain 184 (14 new), ai 6                         |
+| Migrations, RLS, grants, M8 owner-isolation and retention          | `supabase`: `vitest run` against PostgreSQL 16                                                                                                                                                       | Passed. 58 tests (53 from M1-M7, 5 new)                                 |
+| API integration (weight-log, progress-photo, progress routes)      | `apps/api`: `vitest run`                                                                                                                                                                             | Passed. 146 tests (133 from M1-M7, 13 new)                              |
+| Worker                                                             | `apps/worker`: `vitest run`                                                                                                                                                                          | Passed. 37 tests, unchanged from M7 (no new handler; M8 is synchronous) |
+| Flutter format, analyze and tests                                  | `dart format --line-length 120`, `flutter analyze`, `flutter test`                                                                                                                                   | Passed. No issues; 136 tests (125 from M1-M7, 11 new)                   |
+| Contract drift                                                     | `pnpm contracts:check`                                                                                                                                                                               | Passed (after committing regenerated TS/Dart clients)                   |
+| Weight-history validation                                          | Domain tests: rejects <20kg/>400kg and future-dated entries, accepts boundary values and a small clock-skew; API tests for the same over HTTP (422)                                                  | Passed                                                                  |
+| Ownership: weight logs and progress photos                         | API tests: cross-owner delete of a weight log/progress photo 404s, registering another user's media 404s; DB test: user B cannot select/update/delete/insert-as user A's rows even bypassing the API | Passed                                                                  |
+| Photo access/deletion                                              | API test: deleting a progress photo also revokes `GET /v1/media/{id}/download` (404 afterward), mirroring M4's media-deletion test                                                                   | Passed                                                                  |
+| Progress-photo retention matches the blueprint, not M4's default   | API test + DB test: a `progress_photo` upload slot/media asset gets `expires_at = null`; a `meal` upload still gets a 30-day expiry                                                                  | Passed                                                                  |
+| Summary honesty: no active plan is null, never a fabricated 0-of-0 | API test: `diet_adherence`/`workout_adherence` are `{plan_active: false, planned: null, logged: null}` with no plan; domain tests for the same                                                       | Passed                                                                  |
+| Summary honesty: a real zero is distinct from "no plan"            | API test: an active diet plan with planned-but-unlogged meals returns `{plan_active: true, planned: 2, logged: 0}`, then `logged: 1` once one is logged                                              | Passed                                                                  |
+| Starting/current/goal weight fallback                              | API test: falls back to the profile's onboarding weight with no history, then to the first/latest `weight_logs` entry once recorded                                                                  | Passed                                                                  |
+| Idempotent weight/photo writes                                     | API tests: duplicate `createWeightLog`/`createProgressPhoto` (same `client_id`/`media_id`) return the same row, write nothing twice                                                                  | Passed                                                                  |
+| Container image                                                    | `docker build .`                                                                                                                                                                                     | **Not run here.** No Docker daemon, unchanged from M1-M7                |
+| Local Supabase stack                                               | `supabase start && supabase db reset`                                                                                                                                                                | **Not run here.** Plain-Postgres shim used (D-012)                      |
+
+How the M8 acceptance gate maps to tests:
+
+- **Weight history, starting/current/goal:** `progress.test.ts` covers recording, idempotent replay,
+  listing newest-first, deletion with ownership enforcement, and the starting/current fallback chain
+  (profile → first/latest history entry); `weight.test.ts` (domain) covers the validation rules in
+  isolation, including the exact 20/400 kg boundaries and a tolerated few minutes of clock skew.
+- **Honest meal-plan/workout summaries:** `adherence.test.ts` (domain) and `progress.test.ts` (API)
+  both assert the no-plan case is `null`, not `0`, and that a real zero (a plan with nothing logged
+  yet) is a distinct, correctly-reported value; `countElapsed` is tested to exclude every future date.
+- **Progress-photo ownership, access and deletion:** reuses M4's exact pattern —
+  `createProgressPhoto` 404s on another user's or a wrong-purpose media asset, `deleteProgressPhoto`
+  revokes `getMediaDownload` afterward, and the DB-level negative-ownership test proves RLS denies
+  cross-user access even bypassing the API entirely.
+- **Blueprint-specified retention:** a dedicated API test and DB test both assert `expires_at` is null
+  for a progress-photo media asset and non-null for a meal-image one, directly exercising the
+  `PURPOSES_WITH_NO_AUTO_EXPIRY` fix.
+- **Comparison view has no analysis:** by construction — `PhotoComparisonScreen` only calls
+  `listProgressPhotos`/`getMediaDownload`; there is no new backend route, and no image-processing
+  dependency was added anywhere in this milestone's code.
+- **Date/timezone cases:** `getProgress`'s diet/workout adherence queries bound by `local_date`/
+  `session_date`/`meal_date` computed via `todayInTimezone`, reusing M6's tested timezone-boundary
+  convention rather than a new one.
+
+### Known limitations and release gates
+
+- **No licensed nutrition/recipe/exercise catalog, no real AI vision provider, no scheduled media-purge
+  job (carried, unchanged from M3-M7).** Progress summaries reference plan/log data that itself still
+  depends on the M3/M7 test-fixture catalogs; this milestone adds no new catalog dependency.
+- **No wearables, no physique/body-fat analysis, no automatic plan changes from progress data, by
+  design.** The comparison view is pure display; `getProgress` never writes to a diet or workout plan.
+- **`starting_weight_kg` convention (provisional, open for review).** "Starting" is defined as the
+  first-ever `weight_logs` entry, falling back to the profile's onboarding weight — a reasonable,
+  documented choice (D-030), but not a reviewed product decision about what "starting weight" should
+  mean if a user's onboarding weight and first logged entry disagree by a long margin.
+- **Cursor pagination on `/v1/weight-logs`/`/v1/progress-photos` is minimally exercised.** The `cursor`/
+  `limit` parameters are implemented (opaque base64 cursor over `(measured_at|captured_at, id)`) but
+  only single-page listings are covered by tests in this milestone; a multi-page scenario is a natural
+  follow-up test, not a known defect.
+- Android/iOS builds, the container image and Google/Apple sign-in remain unverified here, unchanged
+  from M1-M7.
+
+### M9 hand-off
+
+Not scoped by this milestone.

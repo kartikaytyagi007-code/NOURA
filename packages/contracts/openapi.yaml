@@ -861,7 +861,7 @@ paths:
       summary: Weight history.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -877,7 +877,7 @@ paths:
       summary: Record a weight measurement.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -899,7 +899,7 @@ paths:
       summary: Delete a weight measurement.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -917,7 +917,7 @@ paths:
       summary: Private progress photo references.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -933,7 +933,7 @@ paths:
       summary: Register an uploaded progress photo.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -956,7 +956,7 @@ paths:
       summary: Delete a progress photo.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -974,7 +974,7 @@ paths:
       summary: Weight and consistency trends.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - name: period
           in: query
@@ -2984,22 +2984,60 @@ components:
       properties:
         date: { type: string, format: date }
         weight_kg: { type: number }
+    AdherenceSummary:
+      type: object
+      additionalProperties: false
+      required: [plan_active, planned, logged]
+      description: >-
+        Honest, data-only adherence. When no plan is active, planned/logged are null (never 0) so a
+        missing plan is never mistaken for a real zero (docs/decisions.md D-030).
+      properties:
+        plan_active: { type: boolean }
+        planned: { type: integer, minimum: 0, nullable: true }
+        logged: { type: integer, minimum: 0, nullable: true }
     Progress:
       type: object
       additionalProperties: false
-      required: [period_start, period_end, weight_points, meal_logged_days, workouts_completed, workouts_scheduled_elapsed]
+      required:
+        [
+          period_start,
+          period_end,
+          weight_points,
+          starting_weight_kg,
+          current_weight_kg,
+          goal_weight_kg,
+          meal_logged_days,
+          diet_adherence,
+          workouts_completed,
+          workouts_scheduled_elapsed,
+          workout_adherence,
+        ]
       properties:
         period_start: { type: string, format: date }
         period_end: { type: string, format: date }
         weight_points:
           type: array
           items: { $ref: '#/components/schemas/WeightPoint' }
+        starting_weight_kg:
+          type: number
+          nullable: true
+          description: The user's first-ever recorded weight (weight-history entry, or the onboarding value).
+        current_weight_kg:
+          type: number
+          nullable: true
+          description: The latest weight-history entry, falling back to the profile's recorded weight.
+        goal_weight_kg:
+          type: number
+          nullable: true
+          description: The active goal's target weight, when one is set.
         meal_logged_days: { type: integer, minimum: 0 }
+        diet_adherence: { $ref: '#/components/schemas/AdherenceSummary' }
         workouts_completed: { type: integer, minimum: 0 }
         workouts_scheduled_elapsed:
           type: integer
           minimum: 0
           description: Scheduled sessions already elapsed; excludes future sessions and rest days.
+        workout_adherence: { $ref: '#/components/schemas/AdherenceSummary' }
     ProgressResponse:
       type: object
       additionalProperties: false

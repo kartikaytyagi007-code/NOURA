@@ -7,6 +7,7 @@ import { idempotencyKeyFrom, withIdempotency } from '../../plugins/idempotency.j
 import { registerOperation } from '../../plugins/openapi-routes.js';
 import { confirmMealScanItems, createMealScan, getMealScan } from './scan-service.js';
 import { createMealLog, deleteMealLog, listMealLogs, patchMealLog } from './log-service.js';
+import { createPlateFixesForScan } from './plate-fixes-service.js';
 
 type Schemas = components['schemas'];
 
@@ -43,6 +44,23 @@ export function registerMealRoutes(app: FastifyInstance, deps: Required<AppDeps>
         body: { id, ...body },
       },
       (client) => confirmMealScanItems(client, userId, id, body),
+    );
+    return { data, meta: { request_id: request.id } };
+  });
+
+  registerOperation(app, deps.verifyToken, 'createPlateFixes', async (request) => {
+    const { userId } = requireAuth(request);
+    const { id } = request.params as { id: string };
+    const body = request.body as Schemas['RevisionRequest'];
+    const data = await withIdempotency(
+      deps.db,
+      {
+        userId,
+        route: 'createPlateFixes',
+        key: idempotencyKeyFrom(request),
+        body: { id, ...body },
+      },
+      (client) => createPlateFixesForScan(client, userId, id, body),
     );
     return { data, meta: { request_id: request.id } };
   });

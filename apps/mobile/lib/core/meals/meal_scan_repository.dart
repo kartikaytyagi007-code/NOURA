@@ -29,6 +29,11 @@ abstract interface class MealScanRepository {
     required List<ConfirmedItemInput> items,
   });
 
+  /// Fetches up to three "Fix My Plate" keep/reduce/add suggestions for an already-confirmed scan
+  /// (blueprint §8 step 7, M5), each with a real projected scenario, plus a combined after-changes
+  /// scenario. `expectedRevision` must be the scan's revision right after confirmation.
+  Future<PlateFixes> getPlateFixes({required String scanId, required int expectedRevision});
+
   /// Logs a confirmed meal (from a scan, or directly from edited items) to the diary.
   Future<MealLog> logMeal({
     required DateTime consumedAt,
@@ -104,6 +109,15 @@ class ApiMealScanRepository implements MealScanRepository {
       id: scanId,
       idempotencyKey: newIdempotencyKey(),
       confirmItemsRequest: ConfirmItemsRequest(expectedRevision: expectedRevision, items: items),
+    )).data!.data,
+  );
+
+  @override
+  Future<PlateFixes> getPlateFixes({required String scanId, required int expectedRevision}) => _guard(
+    () async => (await _meals.createPlateFixes(
+      id: scanId,
+      idempotencyKey: newIdempotencyKey(),
+      revisionRequest: RevisionRequest(expectedRevision: expectedRevision),
     )).data!.data,
   );
 
@@ -257,6 +271,47 @@ class MockMealScanRepository implements MealScanRepository {
         policyVersion: 'mock-meal-balance',
         components: const [],
         missingDataMessage: null,
+      ),
+    );
+  }
+
+  @override
+  Future<PlateFixes> getPlateFixes({required String scanId, required int expectedRevision}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    final afterBalance = MealBalance(
+      score: 82,
+      policyVersion: 'mock-meal-balance',
+      components: [],
+      missingDataMessage: null,
+    );
+    return PlateFixes(
+      scanId: scanId,
+      revision: expectedRevision,
+      fixes: [
+        PlateAction(
+          type: PlateActionTypeEnum.add,
+          itemId: null,
+          catalogFoodId: 'mock-food-vegetables',
+          proposedGrams: 80,
+          reason: 'This meal (mock) has no vegetables; adding a serving improves variety and fibre.',
+          projected: ProjectedScenario(
+            label: ProjectedScenarioLabelEnum.projected,
+            totals: NutrientTotals(
+              nutrients: _n(220),
+              coverage: Coverage(itemsTotal: 2, itemsWithNutrition: 2, complete: true),
+            ),
+            mealBalance: afterBalance,
+          ),
+          requiresConfirmation: true,
+        ),
+      ],
+      afterChanges: AfterChangesScenario(
+        totals: NutrientTotals(
+          nutrients: _n(220),
+          coverage: Coverage(itemsTotal: 2, itemsWithNutrition: 2, complete: true),
+        ),
+        mealBalance: afterBalance,
+        assumptions: const ['Assumes adding 80g of Mixed vegetables (mock) to this meal, unchanged otherwise.'],
       ),
     );
   }

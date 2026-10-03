@@ -22,3 +22,4 @@ export * from './media/storage.js';
 export * from './meals/recognition-schema.js';
 export * from './meals/review.js';
 export * from './meals/balance.js';
+export * from './meals/recommendations.js';

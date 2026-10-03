@@ -1,6 +1,7 @@
 import 'package:noura_api_client/src/model/account_export.dart';
 import 'package:noura_api_client/src/model/action_proposal.dart';
 import 'package:noura_api_client/src/model/action_proposal_response.dart';
+import 'package:noura_api_client/src/model/after_changes_scenario.dart';
 import 'package:noura_api_client/src/model/analyzed_item.dart';
 import 'package:noura_api_client/src/model/coach_card.dart';
 import 'package:noura_api_client/src/model/coach_message.dart';
@@ -191,6 +192,9 @@ ReturnType deserialize<ReturnType, BaseType>(
       return ActionProposalResponse.fromJson(value as Map<String, dynamic>)
           as ReturnType;
     case 'ActivityBand':
+    case 'AfterChangesScenario':
+      return AfterChangesScenario.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'AllergyTag':
     case 'AnalyzedItem':
       return AnalyzedItem.fromJson(value as Map<String, dynamic>) as ReturnType;

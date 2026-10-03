@@ -1,4 +1,4 @@
-import type { CatalogRecipe, DietType } from './types.js';
+import type { CatalogFood, CatalogRecipe, DietType } from './types.js';
 
 /**
  * Dietary, allergy, exclusion and dislike filtering (blueprint §7, docs/decisions.md D-025).
@@ -66,4 +66,50 @@ export function filterEligibleRecipes(
   constraints: DietConstraints,
 ): CatalogRecipe[] {
   return recipes.filter((r) => isRecipeEligible(r, constraints));
+}
+
+/**
+ * The same four rules applied to a single catalog food rather than a recipe's ingredient list
+ * (M5, blueprint §8 "Fix My Plate"): a recommended food/swap must be exactly as safe as a recipe
+ * ingredient would be, never a looser check just because it is a single item.
+ */
+export function isFoodDietSafe(food: CatalogFood, dietType: DietType | null): boolean {
+  if (!dietType) return true;
+  return food.diet_tags.includes(dietType);
+}
+
+export function isFoodAllergySafe(food: CatalogFood, allergyIds: readonly string[]): boolean {
+  if (allergyIds.length === 0) return true;
+  if (food.allergen_coverage !== 'complete') return false;
+  const allergySet = new Set(allergyIds);
+  return !food.allergen_tags.some((tag) => allergySet.has(tag));
+}
+
+export function isFoodExclusionSafe(food: CatalogFood, exclusionIds: readonly string[]): boolean {
+  if (exclusionIds.length === 0) return true;
+  const exclusionSet = new Set(exclusionIds);
+  return !food.food_group_tags.some((tag) => exclusionSet.has(tag));
+}
+
+export function isFoodDislikeSafe(food: CatalogFood, dislikes: readonly string[]): boolean {
+  if (dislikes.length === 0) return true;
+  const name = food.name.toLowerCase();
+  const needles = dislikes.map((d) => d.toLowerCase().trim()).filter((d) => d.length > 0);
+  return !needles.some((needle) => name.includes(needle));
+}
+
+export function isFoodEligible(food: CatalogFood, constraints: DietConstraints): boolean {
+  return (
+    isFoodDietSafe(food, constraints.diet_type) &&
+    isFoodAllergySafe(food, constraints.allergy_ids) &&
+    isFoodExclusionSafe(food, constraints.exclusion_ids) &&
+    isFoodDislikeSafe(food, constraints.dislikes)
+  );
+}
+
+export function filterEligibleFoods(
+  foods: readonly CatalogFood[],
+  constraints: DietConstraints,
+): CatalogFood[] {
+  return foods.filter((f) => isFoodEligible(f, constraints));
 }

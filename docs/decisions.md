@@ -606,3 +606,113 @@ explicit state machine (`MealScanFlowState`: idle → uploading → processing �
 saved/failed) rather than a plain `AsyncNotifier<T>`; `image_picker` (exact-pinned, like every other
 dependency in `pubspec.yaml`) is the camera/gallery capture package, added as an implementation of
 the blueprint's already-scoped scanning capability, not a stack change.
+
+## D-027 · Meal Balance formalized to v1, and "Fix My Plate" keep/reduce/add recommendations (M5)
+
+**Scope.** Blueprint §7 "Meal Balance policy v1", §8 step 7, §16 M5: a versioned, documented,
+explainable Meal Balance score; per-component nutrient indicators; backend keep/reduce/add
+recommendations respecting diet/allergy/exclusion/dislike constraints; and an "after changes"
+projected score, calculated only when fully supported by catalog data. No AI model is involved in
+scoring or recommending anywhere in this milestone — everything here is a pure function over the
+same catalog-derived numbers M3/M4 already compute.
+
+**Meal Balance: formalized from provisional to `meal-balance-v1`
+(`packages/domain/src/meals/balance.ts`).** M4 shipped the score under the name
+`meal-balance-v1-provisional` as a side effect of building the meal-scan review flow (D-026). Its
+four-component math (protein/fibre adequacy, vegetable-fruit presence, variety, each capped at 25,
+summed to 100, null with a message whenever nutrition coverage is incomplete) already matched
+blueprint §7 exactly, so M5 does not change the rules — it formalizes them: every threshold that was
+previously an inline magic number (protein grams for max score, fibre grams for max score, distinct
+foods for max variety) now lives in an exported `MEAL_BALANCE_POLICY` constant, documented inline,
+and the policy version becomes the real `meal-balance-v1` (no longer "-provisional") since this is now
+the milestone that makes it a first-class, user-facing, documented feature rather than an M4
+side effect. Each component now also carries a qualitative `band` (`low` / `adequate` / `good`,
+derived from the same thresholds) — this is the ticket's "meal-level nutrient indicators... with
+uncertainty shown" requirement, read directly off the already-deterministic component scores rather
+than a second parallel calculation. `band` is `null` only when the whole score is null (incomplete
+coverage), so a null band is never silently mistaken for "low".
+
+**Recommendations (`packages/domain/src/meals/recommendations.ts`, new).** `createPlateFixes`
+deterministically proposes up to one `keep`, one `reduce` and one `add` action (fewer when no safe,
+catalog-grounded candidate exists for a type — the function never invents a weak suggestion to fill
+three slots):
+
+- **keep**: the confirmed, catalog-matched item contributing the most protein, as positive evidence.
+- **reduce**: the largest confirmed item whose food is simultaneously low-protein (<5 g/100 g),
+  low-fibre (<2 g/100 g) but calorie-bearing — a deterministic stand-in for "refined-carb-like",
+  chosen because the catalog carries no such tag yet (same provisional-matching caveat as D-025's
+  dislike filter). Its portion is cut to 60% (rounded to the nearest 5 g, floor 10 g).
+- **add**: addresses the meal's single weakest-scoring component (vegetable/fruit → a keyword-matched
+  vegetable/fruit food; fibre/protein → the eligible food highest in that nutrient; variety → a
+  vegetable/fruit or, failing that, the highest-fibre food not already present), at a fixed,
+  documented default gram amount per type (80 g vegetable/fruit, 40 g fibre add, 100 g protein add,
+  60 g variety add) — an explicit engineering assumption, not a portion recommendation backed by any
+  review, stated as such in the response's `reason`/`assumptions` text.
+
+Every candidate is drawn from `filterEligibleFoods` (new, `packages/domain/src/catalog/eligibility.ts`):
+the exact same diet/allergy/exclusion/dislike rules D-025 already applies to recipe ingredients
+(`isFoodDietSafe`/`isFoodAllergySafe`/`isFoodExclusionSafe`/`isFoodDislikeSafe`, reusing — not
+reimplementing — the allergen-coverage rule: incomplete coverage is unsafe under any allergy
+constraint), applied to a bare catalog food. A suggestion is additionally restricted to foods with
+**complete** macro data (energy/protein/carb/fat/fibre all non-null) and not already present in the
+meal, so every `projected` scenario attached to a fix is a real calculation, never an estimate.
+
+**"After changes" projection, honestly gated.** `createPlateFixes` also returns `after_changes`: the
+combined totals/Meal Balance if every proposed fix were applied together, plus the gram-level
+`assumptions` made (stated as text, e.g. "Assumes X is reduced from 350g to 210g"). Because `reduce`
+only edits an already-matched item and `add` only uses foods with complete macro data, the combined
+scenario is almost always calculable — but it reuses `computeMealBalance`'s own null-score-plus-message
+convention rather than a second success/failure flag, so if the meal also contains an unrelated
+unmatched item untouched by any suggestion, `after_changes.meal_balance.score` is honestly `null`
+with the same message a user would see on the original analysis. The contract (`AfterChangesScenario`
+schema) therefore always returns the container object; "omitting the score when not calculable" means
+the nested `meal_balance.score` is null, consistent with every other nullable score in this API,
+rather than a different shape for the "can't calculate" case.
+
+**Persistence: none.** Plate fixes are a pure computation over the scan's already-stored, already-
+confirmed `confirmed_analysis` (M4) plus the live catalog and the user's live preferences — nothing
+new is written. `createPlateFixesForScan` (`apps/api/src/modules/meals/plate-fixes-service.ts`)
+therefore needed no new migration and no new user-owned table (so no new negative-ownership test is
+owed under AGENTS.md's rule — the scan row it reads from already has one, from D-026). The route still
+requires `expected_revision` (checked against the scan's post-confirmation revision, 409 on stale) and
+an `Idempotency-Key` (wrapped in the same `withIdempotency` helper every other mutating route uses),
+so duplicate taps and retries are exactly as safe as everywhere else in this API, even though nothing
+is persisted beyond the idempotency record itself.
+
+**API.** `POST /v1/meal-scans/{id}/plate-fixes` (`createPlateFixes`) flips from `x-noura-status:
+planned` to `implemented`. It 422s (`CONSTRAINT_CONFLICT`) if the scan has not been confirmed yet
+(`confirmMealScanItems` must run first — plate fixes need calculated nutrition, not raw recognition),
+409s on a stale `expected_revision`, and 404s for another user's scan (ownership check reused from
+`loadOwnedScan`, D-026).
+
+**Contract.** `MealBalanceComponent` gained `band`; `PlateFixes` gained `after_changes`
+(new `AfterChangesScenario` schema). TS and Dart clients regenerated and committed.
+
+**Flutter.** The meal-scan flow (`MealScanController`) gains an explicit `MealScanAnalyzed` step
+between confirmation and logging (blueprint §8: confirm → Meal Balance → Fix My Plate → log), replacing
+the old single-shot `confirmAndLog` with `confirmItems()` (reviewing → analyzed) and
+`logConfirmedMeal()` (analyzed → saving → saved); `backToReview()` returns to the M4 correction step
+with the confirmed items pre-filled, so the M5 ticket's "user-correction state" reuses M4's existing
+review UI instead of duplicating it. `MealBalanceView` (shown inline in the scan flow) shows the score,
+per-component bands and a loading/empty path to `FixMyPlateScreen` (a separate pushed screen with its
+own idle/loading/loaded/error states via a new `PlateFixesController`), which lists up to three
+`PlateAction` cards (each showing its own projected score or a stated reason it isn't calculable) and
+the combined after-changes card with its assumptions. `MockMealScanRepository.getPlateFixes` returns a
+single clearly `(mock)`-labelled suggestion for development without a server.
+
+**Catalog-honesty note (carried from D-025/D-026, restated for this milestone's reviewer).** Every
+recommendation and score in this milestone is only as trustworthy as the catalog beneath it, which
+remains the synthetic `test_fixture` seed (D-025) — no licensed nutrition dataset is available in this
+environment. The catalog planning gate (D-025) already refuses automated generation in a deployed
+environment without verified/reviewed data; this milestone adds no separate gate for plate fixes
+because they read the same catalog through the same `loadCatalogFoods`, so a deployed environment
+without real catalog data would simply have no eligible foods to suggest (an empty `fixes` array, not
+a fabricated one) rather than silently using test-fixture numbers in production — but this has not been
+exercised against a real deployed-environment configuration in this container, and should be verified
+before staging/production use, same as D-025's open release gate.
+
+**Release gate (open, carried forward).** Same as D-025/D-026: a licensed, reviewed catalog must
+replace the test fixture, and the Meal Balance thresholds (`MEAL_BALANCE_POLICY`) and the
+recommendation defaults (the 60%/80g/40g/100g/60g constants above) are engineering placeholders, not
+reviewed nutrition guidance, and should be confirmed by a reviewer before this is presented as
+anything more than an explainable heuristic.

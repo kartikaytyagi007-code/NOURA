@@ -351,11 +351,10 @@ describe('contract parity', () => {
   it('answers unregistered (planned) routes with the standard 404 envelope', async () => {
     const token = await signToken(keys, { sub: await createAuthUser() });
     const res = await ctx.app.inject({
-      method: 'POST',
-      // Still x-noura-status: planned (M5): plate fixes are explicitly out of M4 scope.
-      url: '/v1/meal-scans/00000000-0000-0000-0000-000000000000/plate-fixes',
+      method: 'GET',
+      // Still x-noura-status: planned: standalone catalog browsing is not in scope through M5.
+      url: '/v1/foods?q=rice',
       headers: { authorization: `Bearer ${token}` },
-      payload: {},
     });
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe('NOT_FOUND');

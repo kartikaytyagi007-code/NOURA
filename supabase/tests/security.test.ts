@@ -282,6 +282,47 @@ describe('M4 meal-scan/meal-log owner isolation (user A vs user B)', () => {
   });
 });
 
+// M6: app.dismissed_recommendations is a newly active user-owned table this milestone (AGENTS.md
+// requires a negative ownership test for each).
+describe('M6 dismissed-recommendation owner isolation (user A vs user B)', () => {
+  it('cannot read, insert-as or delete user B dismissals', async () => {
+    const userA = await createAuthUser();
+    const userB = await createAuthUser();
+    await asOwner((c) =>
+      c.query(
+        `insert into app.dismissed_recommendations (user_id, local_date, slot) values ($1, current_date, 'lunch')`,
+        [userB],
+      ),
+    );
+    const result = await asRole('noura_api', userA, async (c) => {
+      const rows = await c.query('select 1 from app.dismissed_recommendations where user_id = $1', [
+        userB,
+      ]);
+      const deleted = await c.query(
+        'delete from app.dismissed_recommendations where user_id = $1',
+        [userB],
+      );
+      return { rows: rows.rowCount, deleted: deleted.rowCount };
+    });
+    expect(result).toEqual({ rows: 0, deleted: 0 });
+
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query(
+          `insert into app.dismissed_recommendations (user_id, local_date, slot) values ($1, current_date, 'dinner')`,
+          [userB],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+
+    const stillThere = await adminPool.query(
+      'select 1 from app.dismissed_recommendations where user_id = $1',
+      [userB],
+    );
+    expect(stillThere.rowCount).toBe(1);
+  });
+});
+
 describe('child rows cannot attach to another user parent', () => {
   it('rejects a meal_log_item for user A pointing at user B meal_log', async () => {
     const userA = await createAuthUser();

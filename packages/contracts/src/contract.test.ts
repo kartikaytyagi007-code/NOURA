@@ -26,7 +26,7 @@ describe('OpenAPI contract structure', () => {
     }
   });
 
-  it('implements exactly the M1-M4 operations, each tagged with its milestone', () => {
+  it('implements exactly the M1-M6 operations, each tagged with its milestone', () => {
     const implemented = Object.fromEntries(
       ops.filter((o) => o.status === 'implemented').map((o) => [o.operationId, o.milestone]),
     );
@@ -56,6 +56,10 @@ describe('OpenAPI contract structure', () => {
       patchMealLog: 'M4',
       deleteMealLog: 'M4',
       createPlateFixes: 'M5',
+      getHome: 'M6',
+      getNextMeal: 'M6',
+      nextMealAction: 'M6',
+      getInsights: 'M6',
     });
   });
 
@@ -87,6 +91,7 @@ describe('OpenAPI contract structure', () => {
       'POST /diet-plan-meals/{id}/swap-options',
       'PUT /diet-plan-meals/{id}',
       'GET /recommendations/next-meal',
+      'POST /recommendations/next-meal/actions',
       'GET /insights',
       'POST /workout-plans/generate',
       'GET /workout-plans/current',

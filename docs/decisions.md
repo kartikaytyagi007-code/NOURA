@@ -716,3 +716,114 @@ replace the test fixture, and the Meal Balance thresholds (`MEAL_BALANCE_POLICY`
 recommendation defaults (the 60%/80g/40g/100g/60g constants above) are engineering placeholders, not
 reviewed nutrition guidance, and should be confirmed by a reviewer before this is presented as
 anything more than an explainable heuristic.
+
+## D-028 · "What should I eat next?" and honest nutrition-gap tracking (M6)
+
+**Scope.** A synchronous, deterministic next-meal recommendation over today's meal log, the active
+diet plan (if any), goals/preferences/allergies/dislikes and the verified catalog, with add/swap/
+dismiss actions; and daily/seven-day nutrition-pattern summaries that name a protein/fibre gap only
+when the underlying data actually supports the conclusion. No AI model computes any of this — it is
+pure, testable TypeScript over catalog, logged and planned rows, in the same vein as Meal Balance
+(D-027) and the eligibility/target frameworks (D-018/D-019).
+
+**Next-meal selection algorithm.** `buildNextMealRecommendation`
+(`packages/domain/src/meals/next-meal.ts`) first decides the target slot: the caller's requested slot,
+or else the first slot in `SLOT_ORDER = [breakfast, lunch, dinner, snack]` with no logged meal today.
+If the active diet plan covers that slot, the plan's own planned recipe is the primary option
+(`source: 'plan'`, reason "This is the next unlogged slot in your plan") — the recommendation is
+grounded in a plan the user already approved, not a fresh guess. Alternatives to a planned slot
+deliberately carry the _same_ `plan_meal_id`/`plan_meal_revision` as the primary option, so a user can
+swap any alternative directly into that slot without a second lookup. When there is no active plan (or
+no plan meal for that slot), the engine falls back to a deterministic catalog pick: eligible recipes
+(`filterEligibleRecipes`, reusing M3/M5's allergy/diet/dislike/exclusion filtering — an allergen whose
+coverage is unknown is still treated as unsafe, per D-019) are ranked by which recorded nutrient the
+day is currently weakest on (`weakestDailyGap`, protein or fibre against the profile's daily targets),
+with a stable id-order tiebreak so the same inputs always produce the same answer — required for the
+duplicate-request and determinism tests, and for an honest "this is the same reasoning every time"
+property. A prior `dismiss` for that date/slot is sticky: the engine returns no options and an
+explanation rather than silently recomputing the same suggestion the user already turned down.
+
+**Gap-detection honesty (the ticket's hard constraint, upheld at two layers).**
+`packages/domain/src/meals/nutrition-patterns.ts` never treats a day with no logged meals, or with
+logged meals whose nutrition coverage is incomplete, as a zero — it marks that day `coverage_complete:
+false` with an explicit note and computes no gap for it at all. Daily gaps
+(`computeDailyPattern`) are only named when `coverage_complete && targets` both hold, gated at
+`GAP_THRESHOLD_FRACTION = 0.8` of the target. The seven-day summary (`computeWeeklyPattern`) averages
+only over `usable = days.filter(d => d.logged_meals > 0 && d.coverage_complete)`, and always lists every
+excluded day by date so the person can see _why_ a day was dropped rather than guessing. A weekly gap
+is reported only once `usable.length >= MIN_USABLE_DAYS_FOR_WEEKLY_GAPS = 3`; with fewer usable days the
+API still returns the insights payload (never an error) but with `coverage_uncertain: true` and an
+empty gap list, so the UI can say "not enough data yet" instead of fabricating a pattern from two days.
+This mirrors Meal Balance's (D-027) and the nutrient-totals module's (`sumNutrientTotals`) existing
+convention of a null/absent result over a fabricated zero, applied here to averages and gap claims.
+
+**Timezone-bucketing approach.** "Today" and the seven-day window are computed in the user's own
+profile timezone, never UTC, via a new `packages/domain/src/time/timezone.ts`
+(`localDateInTimezone`, `todayInTimezone`, `subtractDays`, `dateRange`) built on
+`Intl.DateTimeFormat('en-CA', { timeZone })` for a `YYYY-MM-DD` local date — the same pattern M4's
+`localDateOf` already established for meal-log dates, now factored into a shared, directly-tested
+module (`timezone.test.ts` asserts a meal logged at 18:29 UTC falls on one local date and one at
+18:31 UTC on the next, for a +05:30 offset). `modules/recommendations/context.ts` and
+`insights-service.ts` resolve "today"/"this week" this way before any query, so a user in a timezone
+ahead of UTC sees their own midnight boundary, not the server's.
+
+**Dismiss-persistence decision.** Dismissing a recommendation is persisted server-side, in a new,
+minimal `app.dismissed_recommendations (user_id, local_date, slot)` table — not just discarded on the
+client — so a dismissal survives app restarts and other devices, and so the ticket's "safe retries and
+duplicate-request handling" requirement has something durable to be idempotent _against_: the insert is
+`ON CONFLICT (user_id, local_date, slot) DO NOTHING`, making a repeated dismiss (retry, double-tap, or
+a second device) a no-op rather than an error. The table stores no recommendation content, only the
+fact and moment of dismissal, keeping it a thin, auditable record rather than a cache. The alternative
+(client-only, ephemeral dismissal) was rejected because it would silently re-offer the same suggestion
+on a fresh session or device, which is the opposite of what a "dismiss" action should honestly do.
+
+**Swap reuses M3, does not duplicate it.** The `swap` action in
+`modules/recommendations/actions-service.ts` calls `replacePlanMeal` from
+`apps/api/src/modules/diet/service.ts` directly — the same revision-checked, allergy-filtered
+replace-a-plan-meal logic the diet-plan screen's own swap flow uses (D-022's revision/idempotency
+convention) — rather than re-implementing slot replacement. The `add` action is new (no plan-meal
+existed before), and `dismiss` is new and specific to this milestone.
+
+**A bugfix carried forward into this migration, not into the applied M1 migration.** Building this
+milestone's new user-owned table exposed a long-standing gap in the M1 grants migration: its
+`alter default privileges in schema app revoke all on tables from public;` statement names only
+`public`, not `anon`/`authenticated`, while the plain-Postgres test shim's schema-independent "grant
+all to anon, authenticated" default-privilege statement therefore applied, unnoticed, to any new `app`
+table created after that migration — this was never exercised before because M2–M5 added no new `app`
+schema table after M1's grants ran. Per AGENTS.md ("never edit an applied migration"), the fix is a
+corrective `alter default privileges ... revoke all on tables/functions from public, anon,
+authenticated;` plus an explicit `revoke all on app.dismissed_recommendations from public, anon,
+authenticated;` inside the new M6 migration itself, documented inline, rather than a retroactive edit
+to M1. The new table's negative-ownership test (`supabase/tests/security.test.ts`) exercises this
+directly: user B cannot select, insert into, or delete from user A's dismissal row.
+
+**Flutter.** Two new screens, `NextMealScreen` and `NutritionInsightsScreen`
+(`apps/mobile/lib/features/meals/`), reached from Meals → "What should I eat next?" / "Seven-day
+patterns", plus a wired (no longer placeholder) next-meal preview and nutrition summary on Home. Both
+screens follow the established idle/loading/loaded/error controller-state convention (D-023,
+`PlateFixesState`/`MealScanState`), show the limited-context/coverage-uncertain notices Home and
+Insights carry from the API rather than re-deriving them, and name every excluded day instead of only
+a count. No Stitch screens exist for next-meal or nutrition-insights (same as D-023/D-026/D-027's
+precedent — the Stitch export has no screens for this feature), so this milestone again uses the
+existing `lib/core/ui` component system (D-014); the visuals can be replaced later without touching
+routing or state. `MockRecommendationsRepository` provides clearly `(mock)`-labelled development data,
+including a sticky in-memory dismissal so the mock flow matches the real one's honesty.
+
+**Catalog-honesty note (carried from D-025/D-026/D-027, restated for this milestone's reviewer).**
+Every suggestion and gap claim in this milestone is only as trustworthy as the catalog and the user's
+logged data beneath it; the catalog itself remains the synthetic `test_fixture` seed (D-025) and no
+licensed nutrition dataset is available in this environment. This milestone adds no new catalog gate —
+it reads eligible recipes through the same `filterEligibleRecipes`/`loadCatalogFoods` path Meal Balance
+and Fix My Plate already use, so a deployed environment without real catalog data would surface no
+eligible options (an empty option list with an honest explanation) rather than a fabricated one.
+
+**Scope limits (explicit, per the ticket).** No 30/90-day analysis — only daily and seven-day. No
+automatic plan adaptation: every action here is a recommendation the user explicitly accepts (add),
+swaps in, or dismisses; the engine never writes to a plan on its own. M7 is not started by this
+milestone.
+
+**Release gate (open, carried forward).** Same as D-025/D-026/D-027: a licensed, reviewed catalog must
+replace the test fixture, and the gap thresholds (`GAP_THRESHOLD_FRACTION = 0.8`,
+`MIN_USABLE_DAYS_FOR_WEEKLY_GAPS = 3`) are engineering placeholders, not reviewed nutrition guidance,
+and should be confirmed by a reviewer before this is presented as anything more than an explainable
+heuristic.

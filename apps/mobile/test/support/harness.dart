@@ -10,6 +10,7 @@ import 'package:noura/core/meals/meal_scan_repository.dart';
 import 'package:noura/core/profile/profile_repository.dart';
 import 'package:noura/core/profile/session_profile.dart';
 import 'package:noura/core/providers.dart';
+import 'package:noura/core/recommendations/recommendations_repository.dart';
 import 'package:noura_api_client/noura_api_client.dart';
 
 import 'fake_profile_server.dart';
@@ -107,6 +108,7 @@ Future<void> pumpNoura(
   required ProfileRepository profiles,
   DietRepository? diet,
   MealScanRepository? mealScan,
+  RecommendationsRepository? recommendations,
   AppConfig? config,
   Size size = const Size(1080, 2340),
 }) async {
@@ -121,6 +123,9 @@ Future<void> pumpNoura(
         profileRepositoryProvider.overrideWithValue(profiles),
         if (diet != null) dietRepositoryProvider.overrideWithValue(diet),
         if (mealScan != null) mealScanRepositoryProvider.overrideWithValue(mealScan),
+        // Home reads this on first build (M6); default to the obviously-labelled mock so tests that
+        // don't care about M6 (most of them) don't need to know about it.
+        recommendationsRepositoryProvider.overrideWithValue(recommendations ?? MockRecommendationsRepository()),
       ],
       child: const NouraApp(),
     ),

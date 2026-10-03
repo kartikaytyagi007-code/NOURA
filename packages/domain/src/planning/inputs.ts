@@ -9,6 +9,8 @@ export interface DietPlanningInputs {
   targetSnapshotId: string | null;
   /** Null when the snapshot has no single point energy (basis: range, D-024) or none was calculated. */
   targetEnergyKcal: number | null;
+  /** Daily protein/fibre targets from the active snapshot, when calculated (M6 gap-detection, D-028). */
+  dailyTargets: { protein_g: number | null; fibre_g: number | null } | null;
   mealsPerDay: number | null;
   constraints: DietConstraints;
 }
@@ -30,6 +32,8 @@ interface SnapshotRow {
   id: string;
   basis: 'point' | 'range' | 'not_calculated';
   energy_kcal: number | null;
+  protein_g: number | null;
+  fibre_g: number | null;
 }
 
 /**
@@ -58,7 +62,9 @@ export async function loadDietPlanningInputs(
   const snapshot = (
     await client.query<SnapshotRow>(
       `select id, selected_targets->>'basis' as basis,
-              (selected_targets->'targets'->>'energy_kcal')::numeric as energy_kcal
+              (selected_targets->'targets'->>'energy_kcal')::numeric as energy_kcal,
+              (selected_targets->'targets'->>'protein_g')::numeric as protein_g,
+              (selected_targets->'targets'->>'fibre_g')::numeric as fibre_g
          from app.target_snapshots where user_id = $1 and valid_to is null`,
       [userId],
     )
@@ -69,6 +75,9 @@ export async function loadDietPlanningInputs(
     eligibilityStatus: profile?.eligibility_status ?? null,
     targetSnapshotId: snapshot?.id ?? null,
     targetEnergyKcal: snapshot?.basis === 'point' ? (snapshot.energy_kcal ?? null) : null,
+    dailyTargets: snapshot
+      ? { protein_g: snapshot.protein_g ?? null, fibre_g: snapshot.fibre_g ?? null }
+      : null,
     mealsPerDay: preferences?.meals_per_day ?? null,
     constraints: {
       diet_type: preferences?.diet_type ?? null,

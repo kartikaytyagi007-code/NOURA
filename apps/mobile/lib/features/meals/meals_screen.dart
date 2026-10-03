@@ -40,11 +40,25 @@ class MealsScreen extends StatelessWidget {
           description: 'Log a meal by searching the catalog directly, without a photo.',
           icon: Icons.menu_book_outlined,
         ),
-        const FeaturePlaceholder(
-          title: 'Seven-day patterns',
-          milestone: 'M6',
-          description: 'Patterns in your logged meals, with coverage shown.',
-          icon: Icons.insights_outlined,
+        Card(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(NSpace.sm),
+            leading: const Icon(Icons.restaurant_outlined),
+            title: const Text('What should I eat next?'),
+            subtitle: const Text('A recommendation grounded in your plan and today\'s log, with alternatives.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(Routes.nextMeal),
+          ),
+        ),
+        Card(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(NSpace.sm),
+            leading: const Icon(Icons.insights_outlined),
+            title: const Text('Seven-day patterns'),
+            subtitle: const Text('Patterns in your logged meals, with coverage shown.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push(Routes.nutritionInsights),
+          ),
         ),
       ],
     );

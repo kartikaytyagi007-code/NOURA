@@ -10,6 +10,7 @@ import 'diet/diet_repository.dart';
 import 'meals/meal_scan_repository.dart';
 import 'profile/profile_repository.dart';
 import 'profile/session_profile.dart';
+import 'recommendations/recommendations_repository.dart';
 
 /// Overridden in main.dart (and tests) with validated, environment-specific instances.
 final appConfigProvider = Provider<AppConfig>((ref) => throw UnimplementedError('appConfigProvider'));
@@ -20,6 +21,9 @@ final profileRepositoryProvider = Provider<ProfileRepository>(
 final dietRepositoryProvider = Provider<DietRepository>((ref) => throw UnimplementedError('dietRepositoryProvider'));
 final mealScanRepositoryProvider = Provider<MealScanRepository>(
   (ref) => throw UnimplementedError('mealScanRepositoryProvider'),
+);
+final recommendationsRepositoryProvider = Provider<RecommendationsRepository>(
+  (ref) => throw UnimplementedError('recommendationsRepositoryProvider'),
 );
 
 class AuthController extends Notifier<AuthStatus> {

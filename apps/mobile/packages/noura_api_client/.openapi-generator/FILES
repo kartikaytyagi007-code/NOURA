@@ -127,8 +127,13 @@ lib/src/model/media_download_response.dart
 lib/src/model/media_purpose.dart
 lib/src/model/meta.dart
 lib/src/model/next_meal.dart
+lib/src/model/next_meal_action_request.dart
+lib/src/model/next_meal_action_response.dart
+lib/src/model/next_meal_action_result.dart
+lib/src/model/next_meal_action_type.dart
 lib/src/model/next_meal_option.dart
 lib/src/model/next_meal_response.dart
+lib/src/model/next_meal_source.dart
 lib/src/model/number_range.dart
 lib/src/model/nutrient_totals.dart
 lib/src/model/nutrients.dart

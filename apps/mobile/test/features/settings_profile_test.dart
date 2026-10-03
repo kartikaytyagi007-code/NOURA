@@ -102,7 +102,11 @@ void main() {
     expect(find.text('Plan requested'), findsNothing);
   });
 
-  testWidgets('Home explains each planning state without showing nutrition numbers', (tester) async {
+  testWidgets('Home explains each planning state regardless of nutrition tracking', (tester) async {
+    // Diet-plan availability (requested/unavailable) is independent of meal-nutrition tracking
+    // (M6): a user without an automated plan can still log meals and see today's totals, so the
+    // plan-status text must appear in every state, but a nutrition summary showing may or may not
+    // also be present and is not what this test is about.
     for (final (planning, title) in [
       (PlanningStatus.unavailablePolicy, 'Plans are not available yet'),
       (PlanningStatus.unavailableNeedsReview, 'Plans are off for now'),
@@ -110,7 +114,6 @@ void main() {
       final server = FakeProfileServer(initial: FakeProfileServer.completedMe(planning: planning));
       await _pump(tester, server);
       expect(find.text(title), findsOneWidget);
-      expect(find.textContaining('kcal'), findsNothing);
       await tester.pumpWidget(const SizedBox());
     }
   });

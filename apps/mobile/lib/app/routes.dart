@@ -20,6 +20,8 @@ abstract final class Routes {
   static const meals = '/meals';
   static const dietPlan = '/meals/diet-plan';
   static const mealScan = '/meals/scan';
+  static const nextMeal = '/meals/next-meal';
+  static const nutritionInsights = '/meals/insights';
   static const coach = '/coach';
   static const workout = '/workout';
   static const progress = '/progress';

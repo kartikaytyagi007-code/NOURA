@@ -527,6 +527,115 @@ How the M5 acceptance gate maps to tests:
 - Android/iOS builds, the container image and Google/Apple sign-in remain unverified here, unchanged
   from M1-M4.
 
-### M6 hand-off
+## M6 "What should I eat next?" and nutrition gap tracking
+
+**Ticket.** A synchronous, deterministic next-meal recommendation grounded in today's meal log, the
+active diet plan, goals/preferences/allergies/dislikes and the verified catalog, with clear reasons,
+suitable alternatives, and add/swap/dismiss actions; explicit uncertainty disclosure whenever today's
+logged data is incomplete; basic daily and seven-day nutrition-pattern summaries that name a
+protein/fibre gap only when the underlying data actually supports it; and the Flutter screens for both,
+with loading/empty/error/incomplete-data states (see D-028). No 30/90-day analysis and no automatic
+plan adaptation are in scope.
+
+### Delivered
+
+- **Next-meal engine (`packages/domain/src/meals/next-meal.ts`, new):** `buildNextMealRecommendation`
+  picks the first unlogged slot in `breakfast → lunch → dinner → snack` order (or a requested slot),
+  grounds the primary option in the active plan's own recipe for that slot when one exists (reason:
+  "This is the next unlogged slot in your plan"), and otherwise falls back to a deterministic
+  catalog pick — eligible recipes only (`filterEligibleRecipes`, reusing M3/M5's diet/allergy/
+  exclusion/dislike filtering), ranked by the day's weakest recorded nutrient
+  (`weakestDailyGap`) with a stable id tiebreak. Alternatives to a planned slot carry the same
+  `plan_meal_id`/`plan_meal_revision` as the primary option, so they can be swapped in directly.
+  `limited_context` is set whenever nothing is logged yet or today's nutrition coverage is incomplete;
+  a prior dismissal for that date/slot is sticky and suppresses re-suggestion.
+- **Honest gap tracking (`packages/domain/src/meals/nutrition-patterns.ts`, new):**
+  `computeDailyPattern` marks a day `coverage_complete: false` (with an explicit note) whenever it has
+  no logged meals or incomplete nutrition data, and only computes a gap when coverage is complete and
+  targets exist. `computeWeeklyPattern` averages only over usable days
+  (`logged_meals > 0 && coverage_complete`), names every excluded day, and only reports a weekly gap
+  once at least `MIN_USABLE_DAYS_FOR_WEEKLY_GAPS = 3` days are usable — otherwise it returns
+  `coverage_uncertain: true` and no gap claim, never a fabricated pattern from a handful of days.
+- **Timezone-aware date bucketing (`packages/domain/src/time/timezone.ts`, new):**
+  `todayInTimezone`/`localDateInTimezone`/`subtractDays`/`dateRange`, built on
+  `Intl.DateTimeFormat('en-CA', { timeZone })`, factor out the local-date convention M4's
+  `localDateOf` already used, now directly tested for a midnight-boundary crossing in a non-UTC
+  timezone.
+- **API (`apps/api/src/modules/recommendations/`, new):** `GET /v1/recommendations/next-meal`
+  (`getNextMeal`), `POST /v1/recommendations/next-meal/actions` (`nextMealAction`, new path and
+  schemas), `GET /v1/insights` (`getInsights`) and `GET /v1/home` (`getHome`) all flip to
+  `x-noura-status: implemented`. `nextMealAction`'s `swap` case delegates directly to the existing
+  `replacePlanMeal` (`apps/api/src/modules/diet/service.ts`, D-022) rather than duplicating it; `add`
+  inserts a new `diet_plan_meals` row after the same eligibility/slot checks; `dismiss` is an
+  idempotent `INSERT ... ON CONFLICT DO NOTHING` into the new `app.dismissed_recommendations` table.
+  All actions run through `withIdempotency` and `withUserTransaction`, deriving the user only from the
+  verified token.
+- **Migration:** `20261001001100_m6_next_meal_dismissals.sql` adds
+  `app.dismissed_recommendations (user_id, local_date, slot)` with `enable_owner_rls` and explicit
+  `noura_api` grants, plus a corrective default-privileges statement for a latent M1 grants gap
+  (`anon`/`authenticated` were never explicitly excluded in schema-scoped default privileges) —
+  documented inline rather than editing the applied M1 migration, per AGENTS.md.
+- **Contracts:** new `NextMealSource`, `NextMealActionType`, `NextMealActionRequest`,
+  `NextMealActionResult`, `NextMealActionResponse` schemas; `NextMealOption` gained `source`,
+  `plan_meal_id`, `plan_meal_revision`, `candidate_id`; `Insights` gained `usable_days`,
+  `excluded_days`, `coverage_uncertain`. TS and Dart clients regenerated and committed.
+- **Flutter:** `NextMealScreen` and `NutritionInsightsScreen`
+  (`apps/mobile/lib/features/meals/`), reached from Meals → "What should I eat next?" / "Seven-day
+  patterns"; Home's next-meal and nutrition-summary placeholders are replaced with real data from a
+  new `HomeController`. `NextMealController` (a plain `Notifier`) drives load/add/swap/dismiss;
+  `InsightsController` and `HomeController` (`AsyncNotifier`) drive the two read-only screens. All
+  three follow the existing idle/loading/loaded/error convention (D-023) and surface the API's
+  limited-context/coverage-uncertain notices rather than re-deriving them. `MockRecommendationsRepository`
+  provides clearly `(mock)`-labelled development data. No Stitch screens exist for this feature (same
+  precedent as D-023/D-026/D-027), so the existing `lib/core/ui` component system is used.
+- **Docs:** decision D-028; this M6 section.
+
+### Acceptance checks (run 2026-10-02 in the development container)
+
+| Check                                                                  | Command                                                                                                              | Result                                                                  |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Secret scan                                                            | `pnpm secrets:check`                                                                                                 | Passed (724 files)                                                      |
+| Lint and format                                                        | `pnpm lint`                                                                                                          | Passed                                                                  |
+| OpenAPI lint                                                           | `pnpm contracts:lint`                                                                                                | Valid. 14 pre-existing example warnings (same as M1-M5)                 |
+| Typecheck                                                              | `pnpm typecheck`                                                                                                     | Passed (6 workspace projects)                                           |
+| Contract, domain and ai unit tests                                     | `pnpm -r --filter './packages/*' run test`                                                                           | Passed. contracts 13, domain 151 (30 new), ai 6                         |
+| Migrations, RLS, grants                                                | `supabase`: `vitest run` against PostgreSQL 16                                                                       | Passed. 44 tests (43 from M1-M5, 1 new negative-ownership)              |
+| API integration (recommendations routes)                               | `apps/api`: `vitest run`                                                                                             | Passed. 118 tests (95 from M1-M5, 23 new)                               |
+| Worker                                                                 | `apps/worker`: `vitest run`                                                                                          | Passed. 28 tests, unchanged from M5 (no new handler; M6 is synchronous) |
+| Flutter format, analyze and tests                                      | `dart format --line-length 120`, `flutter analyze`, `flutter test`                                                   | Passed. No issues; 110 tests (86 from M1-M5, 24 new)                    |
+| Contract drift                                                         | `pnpm contracts:check`                                                                                               | Passed (after committing regenerated TS/Dart clients)                   |
+| Never suggests an allergen/diet-incompatible food                      | API test: vegan constraint excludes a non-vegan plan/catalog option; domain test over the eligibility pool           | Passed                                                                  |
+| Ownership: next-meal/actions/insights/home all require a session       | API tests: each route 401s without a token                                                                           | Passed                                                                  |
+| Incomplete today's log never silently treated as zero                  | Domain + API tests: `limited_context`/`coverage_complete` false whenever nothing or partial data is logged           | Passed                                                                  |
+| Catalog-based calculations use real nutrient totals, never fabricate   | Domain tests: `sumNutrientTotals`/`weakestDailyGap` propagate null coverage rather than zero                         | Passed                                                                  |
+| Date/timezone boundaries, including a non-UTC midnight crossing        | `timezone.test.ts` (domain) + API test: a meal logged near local midnight in a non-UTC timezone buckets correctly    | Passed                                                                  |
+| Duplicate/retried next-meal action requests                            | API test: identical `Idempotency-Key` + body replays the same result and writes nothing twice                        | Passed                                                                  |
+| Dismiss is sticky and idempotent                                       | API test: a later GET honestly reports the dismissal; repeated dismiss is a no-op (`ON CONFLICT DO NOTHING`)         | Passed                                                                  |
+| Swap delegates to, not duplicates, M3's replace logic                  | API test: swap action behaves identically to `replacePlanMeal`, including 409 on stale `expected_revision`           | Passed                                                                  |
+| Seven-day average excludes incomplete days, never counts them as zero  | Domain + API tests: `computeWeeklyPattern`/`GET /v1/insights` average only over usable days, name every excluded day | Passed                                                                  |
+| Weekly gap withheld below the usable-days threshold                    | Domain + API tests: fewer than 3 usable days yields `coverage_uncertain: true` and no gap claim                      | Passed                                                                  |
+| Negative ownership: new user-owned table (`dismissed_recommendations`) | `supabase` test: user B cannot read, insert-as, or delete user A's dismissal row                                     | Passed                                                                  |
+| Container image                                                        | `docker build .`                                                                                                     | **Not run here.** No Docker daemon, unchanged from M1-M5                |
+| Local Supabase stack                                                   | `supabase start && supabase db reset`                                                                                | **Not run here.** Plain-Postgres shim used (D-012)                      |
+
+### Known limitations and release gates
+
+- **No licensed nutrition/recipe catalog (open, carried from M3-M5, the central blocker).**
+  Next-meal suggestions and gap calculations are computed correctly, but only against the synthetic
+  `test_fixture` catalog (D-025); see D-028's catalog-honesty note.
+- **Gap thresholds are engineering placeholders (provisional, D-028).**
+  `GAP_THRESHOLD_FRACTION = 0.8` and `MIN_USABLE_DAYS_FOR_WEEKLY_GAPS = 3` have not been reviewed by a
+  nutrition professional; they should be confirmed before this is presented as anything beyond an
+  explainable heuristic.
+- **No automatic plan adaptation, by design.** Every next-meal action is a recommendation the user
+  explicitly accepts, swaps in, or dismisses; the engine never writes to a plan on its own.
+- **No 30/90-day analysis, by design.** Only daily and seven-day summaries are in scope for M6.
+- **No scheduled purge, no real AI vision provider, no licensed catalog (carried, unchanged from M5).**
+- Android/iOS builds, the container image and Google/Apple sign-in remain unverified here, unchanged
+  from M1-M5.
+
+### M7 hand-off
+
+Workouts (blueprint §11, §16 M7) and Home's "Today's workout" placeholder. Not started.
 
 Next-meal options, daily summaries and seven-day patterns (blueprint §9, §10, §16 M6). Not started.

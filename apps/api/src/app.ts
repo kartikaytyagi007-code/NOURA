@@ -10,6 +10,7 @@ import { registerMediaRoutes } from './modules/media/routes.js';
 import { registerDevStorageRoutes } from './modules/media/dev-storage.js';
 import { registerMeRoutes } from './modules/me/routes.js';
 import { registerProfileRoutes } from './modules/profile/routes.js';
+import { registerRecommendationRoutes } from './modules/recommendations/routes.js';
 import type { TokenVerifier } from './plugins/auth.js';
 import type { Database } from './plugins/db.js';
 import { registerErrorHandling } from './plugins/errors.js';
@@ -86,6 +87,7 @@ export function buildApp(
   registerDietRoutes(app, fullDeps);
   registerMediaRoutes(app, fullDeps);
   registerMealRoutes(app, fullDeps);
+  registerRecommendationRoutes(app, fullDeps);
   // Development/test only: see modules/media/dev-storage.ts. Never registered when deployed.
   if (
     deps.config.appEnv !== 'staging' &&

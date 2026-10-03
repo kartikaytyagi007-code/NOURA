@@ -15,6 +15,8 @@ import '../features/diet/diet_plan_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/meals/meal_scan_screen.dart';
 import '../features/meals/meals_screen.dart';
+import '../features/meals/next_meal_screen.dart';
+import '../features/meals/nutrition_insights_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/progress/progress_screen.dart';
 import '../features/session/session_error_screen.dart';
@@ -89,6 +91,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(path: 'diet-plan', builder: (_, _) => const DietPlanScreen()),
                   GoRoute(path: 'scan', builder: (_, _) => const MealScanScreen()),
+                  GoRoute(path: 'next-meal', builder: (_, _) => const NextMealScreen()),
+                  GoRoute(path: 'insights', builder: (_, _) => const NutritionInsightsScreen()),
                 ],
               ),
             ],

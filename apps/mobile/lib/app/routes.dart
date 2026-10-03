@@ -18,6 +18,7 @@ abstract final class Routes {
 
   static const home = '/home';
   static const meals = '/meals';
+  static const dietPlan = '/meals/diet-plan';
   static const coach = '/coach';
   static const workout = '/workout';
   static const progress = '/progress';

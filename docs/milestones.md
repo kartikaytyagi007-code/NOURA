@@ -3,11 +3,12 @@
 Status of each milestone from blueprint §16. A milestone counts as complete only when its
 acceptance gate passes. A schema that exists without the feature does not count.
 
-| Milestone     | Status                                                        |
-| ------------- | ------------------------------------------------------------- |
-| M1 Foundation | Approved by the owner. PR #1 open with CI green               |
-| M2 Profile    | **Implemented, awaiting review**                              |
-| M3 to M10     | Not started. Contract drafts only (`x-noura-status: planned`) |
+| Milestone     | Status                                                         |
+| ------------- | -------------------------------------------------------------- |
+| M1 Foundation | Approved by the owner. PR #1 open with CI green                |
+| M2 Profile    | Implemented, awaiting review. PR #2 (draft) open with CI green |
+| M3 Diet plan  | **Implemented, awaiting review**                               |
+| M4 to M10     | Not started. Contract drafts only (`x-noura-status: planned`)  |
 
 ## M1 Foundation
 
@@ -173,3 +174,126 @@ How the M2 acceptance gate maps to tests:
 ### M3 hand-off
 
 See D-024. Diet plan generation is not started.
+
+## M3 Diet plan
+
+**Ticket.** Deliver the diet-plan generation pipeline end to end: a provenance-backed catalog,
+deterministic nutrition targets, generation through the job queue, 7-day/daily plan views with
+portions and nutrition totals that reconcile exactly, meal swaps, user-requested regeneration, and
+enforcement of diet type, allergies, dislikes and other profile constraints — honestly, with no
+invented nutrition data (see the catalog-data blocker and D-025 below).
+
+### Delivered
+
+- **Catalog (data blocker, mitigated — D-025):** `data/foods`, `data/recipes`, `data/exercises` and
+  `data/provenance` are still empty; no licensed dataset exists in this environment. Migration
+  `20261001001000_catalog_test_fixture.sql` seeds ~30 foods and 16 recipes, all explicitly
+  `quality_flag = 'test_fixture'` under a `food_sources` row whose `license_notes` disclaims
+  production use. A new catalog planning gate (`packages/domain/src/catalog/gate.ts`) refuses
+  automated generation in a deployed environment unless at least one `verified`/`reviewed` recipe
+  per slot exists; development and test may use the fixture.
+- **Domain (`packages/domain/src`):**
+  - `catalog/eligibility.ts`: diet-type, allergen-safety (incomplete coverage is unsafe whenever any
+    allergy constraint exists), exclusion and dislike filtering.
+  - `catalog/nutrition.ts`, `nutrition/rounding.ts`: per-ingredient rounding and totals that sum
+    exactly, with unknown nutrients reported as `null`, never zero.
+  - `planning/generate.ts`: deterministic 7-day plan generation with per-meal portion scaling toward
+    an energy target (or the recipe's base portion when only a range target is available, D-024),
+    and explicit infeasibility results.
+  - `planning/swap.ts`, `planning/storage.ts`: swap-candidate computation and the plan-meal storage
+    shape shared by the API and the worker.
+  - `planning/inputs.ts`, `catalog/repository.ts`: the single, shared DB-reading functions used by
+    both the API and the worker, so eligibility and targets can never drift between them.
+- **Queue:** `GENERATION_REQUEST_QUEUES` now routes both `diet_plan` and `plan_regeneration` to
+  `diet-plan.generate`.
+- **Worker:** `apps/worker/src/handlers/diet-plan-generate.ts`, registered in `runtime.ts`.
+  Idempotent on `generation_request_id`; reloads everything fresh under the user's own
+  `noura_worker` context; supersedes the previous active plan on regeneration; records an honest
+  `catalog_unavailable` or `plan_infeasible` result instead of ever fabricating a plan. Requests
+  relayed before this handler existed (the open question in D-017/D-024) are simply processed now.
+- **API (`apps/api/src/modules/diet`):** `POST /v1/diet-plans/generate` (Idempotency-Key,
+  `REVISION_CONFLICT` on a stale `profile_revision`, reuses an in-flight request via the existing
+  partial unique index), `GET /v1/diet-plans/current`, `POST /v1/diet-plan-meals/{id}/swap-options`
+  (read-only, re-filters eligibility fresh), `PUT /v1/diet-plan-meals/{id}` (Idempotency-Key,
+  `expected_revision`, re-validates the candidate against fresh eligibility before applying it).
+- **Contracts:** `generateDietPlan`, `getCurrentDietPlan`, `getSwapOptions`, `replacePlanMeal`
+  flipped to `x-noura-status: implemented`; TS and Dart clients regenerated and committed.
+- **Flutter:** `core/diet` (repository + `DietController`) and `features/diet/diet_plan_screen.dart`
+  — a day selector, meal cards with portions/recipe name/kcal, a swap bottom sheet, a regenerate
+  confirmation, and loading/empty/error states (reusing the M1/M2 component system per D-014/D-023;
+  the Stitch export has no diet-plan screens). Reached from Meals → "Diet plan". A development-only
+  `MockDietRepository` mirrors `MockProfileRepository`'s convention. Updating Home's
+  `plan_generation`/`next_meal` cards to the now-real plan data was left for a follow-up (lower
+  priority per the ticket); Home is unchanged from M2.
+- **Docs:** decision D-025; this M3 section.
+
+### Acceptance checks (run 2026-10-02 in the development container)
+
+| Check                                                                           | Command                                                                | Result                                                                  |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Secret scan                                                                     | `pnpm secrets:check`                                                   | Passed (650 files)                                                      |
+| Lint and format                                                                 | `pnpm lint`                                                            | Passed                                                                  |
+| OpenAPI lint                                                                    | `pnpm contracts:lint`                                                  | Valid. 14 pre-existing example warnings (same as M2)                    |
+| Typecheck                                                                       | `pnpm typecheck`                                                       | Passed (6 workspace projects)                                           |
+| Contract, domain and ai unit tests                                              | `pnpm -r --filter './packages/*' run test`                             | Passed. contracts 13, domain 68, ai 5                                   |
+| Migrations, RLS, grants, catalog seed                                           | `supabase`: `vitest run` against PostgreSQL 16                         | Passed. 39 tests (33 from M1/M2, 6 new)                                 |
+| API integration (diet routes)                                                   | `apps/api`: `vitest run`                                               | Passed. 76 tests (62 from M1/M2, 14 new)                                |
+| Worker (handler, relay, runtime)                                                | `apps/worker`: `vitest run`                                            | Passed. 20 tests (12 from M1/M2, 8 new)                                 |
+| Flutter format, analyze and tests                                               | `dart format --line-length 120`, `flutter analyze`, `flutter test`     | Passed. No issues; 71 tests (62 from M1/M2, 9 new)                      |
+| Flutter web build                                                               | `flutter build web --release`                                          | Passed                                                                  |
+| Contract drift                                                                  | `pnpm contracts:check`                                                 | Passed (after committing regenerated TS/Dart clients)                   |
+| Idempotent generation under concurrency                                         | API test: duplicate `generateDietPlan` with the same key               | Passed (one `generation_requests` row)                                  |
+| At-least-once worker processing                                                 | Worker test: redelivery after "crash" between commit and terminal mark | Passed (`already_generated`, no duplicate plan)                         |
+| Honest infeasibility / catalog gate                                             | Worker tests: no eligible recipe for a slot; production catalog gate   | Passed (`plan_infeasible` / `catalog_unavailable`, no plan row created) |
+| Day totals reconcile exactly                                                    | Domain test: summing already-rounded meals vs. re-deriving from grams  | Passed                                                                  |
+| Flutter Android build                                                           | `flutter build apk --debug`                                            | **Not run here** (no Android SDK), same as M1/M2                        |
+| Container image                                                                 | `docker build .`                                                       | **Not run here.** No Docker daemon, same as M1/M2                       |
+| Local Supabase stack                                                            | `supabase start && supabase db reset`                                  | **Not run here.** Plain-Postgres shim used (D-012)                      |
+| Live worker + API processing a real request against a deployed Supabase project | Manual                                                                 | **Not run.** Needs the owner's Supabase project                         |
+
+How the M3 acceptance gate maps to tests:
+
+- **Diet/allergy/exclusion/dislike enforcement:** domain tests for every diet type, the
+  allergen-coverage rule, exclusions and dislikes; worker test for an allergy set that makes every
+  breakfast recipe ineligible (infeasible, not a crash or a silent violation).
+- **7-day/daily views with totals that reconcile:** API test asserts a day's `totals.nutrients`
+  equals the sum of its `meals[].nutrition.nutrients`; domain test asserts the same at the
+  recipe/day level with values chosen to expose floating-point drift if the rounding were wrong.
+- **Swaps and regeneration:** API tests for `getSwapOptions`/`replacePlanMeal` (candidate safety,
+  revision conflict, idempotent replay) and for `generateDietPlan` picking `plan_regeneration` once
+  an active plan exists; worker test for superseding the previous plan and keeping exactly one
+  active version.
+- **Idempotency and concurrency:** API tests for duplicate `generateDietPlan`/`replacePlanMeal`
+  requests (same key, new key, stale revision); worker tests for redelivery before and after the
+  handler existed.
+- **No invented nutrition data in production:** worker test for the catalog gate refusing a
+  `test_fixture`-only catalog in a `production`-configured run.
+
+### Known limitations and release gates
+
+- **No licensed nutrition/recipe catalog (open, the central M3 blocker).** Only the synthetic
+  `test_fixture` catalog exists (D-025). Staging and production cannot plan until a licensed,
+  reviewed dataset is imported; the catalog gate enforces this mechanically.
+- **Approved target policy (open, carried from M2).** Still only the test policy exists (D-018);
+  plan generation inherits this gate via the target snapshot.
+- **Portion-scaling tolerance (provisional).** A 50%–175% engineering clamp stands in for a
+  reviewer-set energy tolerance (D-025).
+- **Diet/allergy/exclusion vocabularies (provisional, carried from M2).** Still D-020's provisional
+  tag sets.
+- **Home wiring (deferred).** `plan_generation`/`next_meal` on Home still reflect M2's placeholder
+  behaviour; only the Meals → Diet plan screen was wired to real (fixture-backed) data this
+  milestone, per the ticket's stated priority.
+- **Recipe instructions and catalog browsing (`GET /v1/foods`, `GET /v1/recipes/{id}`)** remain
+  `x-noura-status: planned`; M3 only needed recipes through the diet-plan response, not standalone
+  catalog browsing.
+- Google/Apple sign-in, the Android/iOS builds and the container image remain unverified here,
+  unchanged from M1/M2.
+
+### M4 hand-off
+
+Meal-photo scanning (blueprint §8, §16): a camera/gallery capture flow, a recognition adapter behind
+the existing AI-provider abstraction (`packages/ai`, mock-first per D-010), mapping recognized items
+onto the M3 catalog (and handling items the catalog cannot match, honestly, not by guessing
+nutrition), and manual meal logs with edit/delete. `app.meal_scans`, `app.meal_logs` and
+`app.meal_log_items` already exist from M1; `POST /v1/meal-logs` and friends are drafted in the
+contract as `x-noura-status: planned`, `x-noura-milestone: M4`. Not started.

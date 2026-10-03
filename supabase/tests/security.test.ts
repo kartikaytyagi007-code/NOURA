@@ -83,10 +83,12 @@ describe('schema-level security posture', () => {
         ),
       ),
     ).rejects.toThrow(/permission denied/);
+    // Reads are allowed (catalog_read policy); M3 seeds a labelled test_fixture catalog (D-025), so
+    // this no longer asserts the table is empty, only that the role can read and never write it.
     const { rowCount } = await asRole('noura_api', userId, (c) =>
       c.query('select 1 from app.foods'),
     );
-    expect(rowCount).toBe(0);
+    expect(rowCount).toBeGreaterThanOrEqual(0);
   });
 
   it('does not let the API role delete audit-like records', async () => {

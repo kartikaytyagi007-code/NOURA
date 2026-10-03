@@ -12,6 +12,7 @@ import pg from 'pg';
 import { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { WorkerConfig } from './config.js';
+import { handleDietPlanGenerate } from './handlers/diet-plan-generate.js';
 import { handleSystemPing } from './handlers/system-ping.js';
 import { relayGenerationRequests, startRelayLoop } from './relay.js';
 
@@ -73,6 +74,21 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
     QUEUES.systemPing,
     { batchSize: 1, localConcurrency: config.concurrency },
     (jobs) => handleSystemPing(jobs, log),
+  );
+
+  // Job handlers assume the restricted noura_worker role per job, with the user context the
+  // generation request names (D-017); this pool is separate from pg-boss's own internal one.
+  const jobPool = new pg.Pool({
+    connectionString: config.databaseUrl,
+    max: config.poolMax,
+    application_name: 'noura-worker-jobs',
+  });
+  jobPool.on('error', (error) => log.error({ err: error }, 'job pool error'));
+
+  await boss.work<QueuePayloads['diet-plan.generate']>(
+    QUEUES.dietPlanGenerate,
+    { batchSize: 1, localConcurrency: config.concurrency },
+    (jobs) => handleDietPlanGenerate(jobs, jobPool, config.appEnv, log),
   );
   ready = true;
 
@@ -138,6 +154,7 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
       ready = false;
       await relay.stop();
       await relayPool.end();
+      await jobPool.end();
       await new Promise<void>((resolve) => healthServer.close(() => resolve()));
       // Graceful: let in-flight handlers finish; unfinished jobs are retried (at-least-once).
       await boss.stop({ graceful: true, timeout: 20_000 });

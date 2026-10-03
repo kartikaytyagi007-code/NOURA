@@ -554,7 +554,7 @@ paths:
       summary: Request seven-day diet plan generation.
       tags: [diet]
       x-noura-milestone: M3
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -578,7 +578,7 @@ paths:
       summary: Active weekly diet plan.
       tags: [diet]
       x-noura-milestone: M3
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/DateQuery'
       responses:
@@ -595,7 +595,7 @@ paths:
       summary: Swap candidates for a plan meal with a daily preview.
       tags: [diet]
       x-noura-milestone: M3
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
       requestBody:
@@ -619,7 +619,7 @@ paths:
       summary: Replace one plan meal with a confirmed candidate.
       tags: [diet]
       x-noura-milestone: M3
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'

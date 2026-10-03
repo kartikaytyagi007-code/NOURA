@@ -5,6 +5,7 @@ import 'package:noura_api_client/noura_api_client.dart';
 
 import 'auth/auth_repository.dart';
 import 'auth/auth_state.dart';
+import 'coach/coach_repository.dart';
 import 'config/app_config.dart';
 import 'diet/diet_repository.dart';
 import 'meals/meal_scan_repository.dart';
@@ -33,6 +34,7 @@ final workoutRepositoryProvider = Provider<WorkoutRepository>(
 final progressRepositoryProvider = Provider<ProgressRepository>(
   (ref) => throw UnimplementedError('progressRepositoryProvider'),
 );
+final coachRepositoryProvider = Provider<CoachRepository>((ref) => throw UnimplementedError('coachRepositoryProvider'));
 
 class AuthController extends Notifier<AuthStatus> {
   @override

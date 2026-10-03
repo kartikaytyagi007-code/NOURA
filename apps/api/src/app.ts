@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createMediaStorage, type MediaStorage } from '@noura/domain';
 import Fastify, { LogController, type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { ApiConfig } from './config.js';
+import { registerCoachRoutes } from './modules/coach/routes.js';
 import { registerDietRoutes } from './modules/diet/routes.js';
 import { registerHealthRoutes } from './modules/health/routes.js';
 import { registerJobRoutes } from './modules/jobs/routes.js';
@@ -92,6 +93,7 @@ export function buildApp(
   registerRecommendationRoutes(app, fullDeps);
   registerWorkoutRoutes(app, fullDeps);
   registerProgressRoutes(app, fullDeps);
+  registerCoachRoutes(app, fullDeps);
   // Development/test only: see modules/media/dev-storage.ts. Never registered when deployed.
   if (
     deps.config.appEnv !== 'staging' &&

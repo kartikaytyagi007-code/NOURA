@@ -26,7 +26,7 @@ describe('OpenAPI contract structure', () => {
     }
   });
 
-  it('implements exactly the M1-M8 operations, each tagged with its milestone', () => {
+  it('implements exactly the M1-M9 operations, each tagged with its milestone', () => {
     const implemented = Object.fromEntries(
       ops.filter((o) => o.status === 'implemented').map((o) => [o.operationId, o.milestone]),
     );
@@ -73,6 +73,12 @@ describe('OpenAPI contract structure', () => {
       createProgressPhoto: 'M8',
       deleteProgressPhoto: 'M8',
       getProgress: 'M8',
+      createCoachThread: 'M9',
+      deleteCoachThread: 'M9',
+      listCoachMessages: 'M9',
+      sendCoachMessage: 'M9',
+      applyActionProposal: 'M9',
+      cancelActionProposal: 'M9',
     });
   });
 
@@ -120,6 +126,7 @@ describe('OpenAPI contract structure', () => {
       'DELETE /progress-photos/{id}',
       'GET /progress',
       'POST /coach/threads',
+      'DELETE /coach/threads/{id}',
       'GET /coach/threads/{id}/messages',
       'POST /coach/threads/{id}/messages',
       'POST /action-proposals/{id}/apply',

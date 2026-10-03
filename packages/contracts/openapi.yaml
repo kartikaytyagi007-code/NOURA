@@ -995,7 +995,7 @@ paths:
       summary: Create a coach thread.
       tags: [coach]
       x-noura-milestone: M9
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -1005,13 +1005,31 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CoachThreadResponse' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+  /v1/coach/threads/{id}:
+    delete:
+      operationId: deleteCoachThread
+      summary: Delete an owned coach thread and its messages/proposals (D-031; user-initiated deletion).
+      tags: [coach]
+      x-noura-milestone: M9
+      x-noura-status: implemented
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/coach/threads/{id}/messages:
     get:
       operationId: listCoachMessages
       summary: Messages in an owned coach thread.
       tags: [coach]
       x-noura-milestone: M9
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/Cursor'
@@ -1029,7 +1047,7 @@ paths:
       summary: Send a message to the coach.
       tags: [coach]
       x-noura-milestone: M9
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1054,7 +1072,7 @@ paths:
       summary: Apply a coach proposal once.
       tags: [coach]
       x-noura-milestone: M9
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1079,7 +1097,7 @@ paths:
       summary: Cancel a coach proposal.
       tags: [coach]
       x-noura-milestone: M9
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'

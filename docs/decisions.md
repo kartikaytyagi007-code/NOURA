@@ -1035,3 +1035,147 @@ retried registration after a flaky response never creates a duplicate reference.
 real AI vision provider, and a scheduled media-purge job remain the same open items as M3-M7; this
 milestone adds nothing new to that list, since progress photos are explicitly retained until deletion
 rather than purged on a schedule.
+
+## D-031 · AI Coach: context-aware chat, safety screening, limited swap-only proposals (M9)
+
+**Scope.** Context-aware coach chat grounded in the user's own profile/goals, active diet plan,
+today's logged meals and workout schedule; honest gap-handling when that context is missing; an
+extension of the M4 mock-first AI-provider pattern (D-010) to `coachReply`; out-of-scope/medical-safety
+screening on both the user's message and the provider's output; persisted chat history with
+per-user RLS; and a single, narrowly-scoped confirmable action (`swap_meal`) applied through the exact
+same domain function the existing swap UI uses. No diagnosis, no medication dosing, no invented
+nutrition/exercise facts, no silent plan changes (blueprint §1, §10, §12, §16 "M9 Coach").
+
+**Schema already existed from M1 — one additive column, no new tables.**
+`app.coach_threads`/`app.coach_messages`/`app.action_proposals`
+(`supabase/migrations/20261001000600_insights_coach.sql`), RLS-enabled and granted
+(`20261001000800_storage_and_grants.sql`), were already defined, unused, exactly as M1 built ahead for
+M3-M8's catalog/media/progress tables. The OpenAPI coach/action-proposal operations and schemas were
+also already drafted as `x-noura-status: planned`; this milestone flips them to `implemented`, adds one
+new operation (`DELETE /v1/coach/threads/{id}`, below), and adds a single additive column —
+`app.coach_messages.cards jsonb` (`supabase/migrations/20261001001300_m9_coach_message_cards.sql`) —
+so a completed reply's structured cards (blueprint §16 "grounded responses/cards") persist alongside
+the message that produced them, exactly like every other snapshot column in this schema. A new
+negative-ownership test block (`supabase/tests/security.test.ts`, "M9 coach thread/message/action-
+proposal owner isolation") covers all three tables: cross-user read/update/delete, client-supplied
+`user_id` rejection, a message that tries to attach to another user's thread, and worker-role parity.
+
+**Context assembly: `loadCoachContext` in `packages/domain/src/coach/context.ts`, not `apps/api`.**
+M6's equivalent (`loadTodayContext`) lives in `apps/api/src/modules/recommendations/context.ts`
+because only the API calls it. The coach's reply, by contrast, is generated asynchronously by the
+**worker** (see below), so the loader had to live in `packages/domain` where both apps can reach it. It
+reuses the exact same domain primitives M3/M6 already built — `loadDietPlanningInputs`,
+`loadCatalogRecipes`, `filterEligibleRecipes` — rather than a parallel read path, and is intentionally
+narrow: it loads the user's profile/goal presence, whether an active diet plan exists and, if so, only
+the single _first_ planned slot for today (with one real, eligible alternate candidate already
+resolved), today's logged-meal count, and whether an active workout plan exists with today's session
+title/status. Every "has a plan" flag is a real boolean and every missing-data case is a real `null`,
+never a fabricated zero (the same honesty convention as D-028's `coverage_uncertain` and D-030's
+`AdherenceSummary`).
+
+**Provider boundary: strict Zod schemas in both directions (`packages/ai/src/validators/coach.ts`).**
+`validateCoachContextInput` validates the (deliberately small) payload the worker is about to send the
+provider; `validateCoachProviderOutput` validates what comes back — `answer_text` (prose only),
+`evidence_refs` (opaque keys), and at most one `proposed_action`. The provider **never** returns a
+card, a nutrition number, or an exercise prescription: cards are always built server-side, directly
+from the already-loaded `CoachContext`, by `buildCards()` in the worker handler — mirroring M5/M6's
+"AI explains, domain code computes" split and this milestone's own scope note 6 ("the model's role is
+conversational framing, never a source of factual nutrition/exercise claims").
+
+**`proposed_action.type` accepts only `swap_meal` — a deliberate, documented scope limit.** The
+blueprint's `ActionProposal.type` enum and the ticket both name three allowed proposals: `swap_meal`,
+`regenerate_day`, `reschedule_workout`. Only `swap_meal` has an existing, already-shipped, user-facing
+confirmed-action endpoint to delegate to (`replacePlanMeal`, used by M3's swap-options flow and M6's
+next-meal swap action). Building new plan-mutation domain logic for whole-day regeneration or workout
+rescheduling is exactly the kind of new feature AGENTS.md says not to invent beyond a milestone's scope.
+`CoachProposedActionSchema` therefore only validates `swap_meal`; the other two remain valid values on
+the `ActionProposal` **API** schema for forward compatibility (so a later milestone can add them without
+another contract change), but this milestone's provider/validator never produces them, and
+`applyActionProposal` refuses either with `CONSTRAINT_CONFLICT` if one is ever found (defence in depth
+only — nothing in this milestone can actually create one).
+
+**No silent actions, enforced structurally, not just by prompt instruction.** `createSwapProposal`
+(`apps/worker/src/handlers/coach-reply.ts`) re-resolves the "real" plan meal/candidate from a freshly
+loaded `CoachContext` and silently drops the provider's proposal if its ids don't match that fresh
+read — a provider can never reference a stale or invented id into an actual proposal row. Applying a
+proposal (`POST /v1/action-proposals/{id}/apply`) calls `replacePlanMeal` **exactly as the existing
+swap UI does**, with the same revision check, so the coach can never perform a mutation the UI itself
+could not already perform, and a message is never more than a _suggestion_ until the user explicitly
+taps confirm (blueprint §12 `requires_confirmation=true`; scope note 7).
+
+**Safety: enforced twice, not once.** `checkSafety` (`packages/domain/src/coach/safety.ts`) is a
+conservative keyword/pattern screen over four blueprint-named categories (diagnosis requests,
+medication dosing, eating-disorder-risk phrasing, body-fat/physique-analysis requests). It runs
+**before** the provider is ever called (an out-of-scope user message short-circuits straight to a safe,
+clinician-redirecting decline — the mock is never invoked, so this behaves identically once a real
+provider is configured), and again on the provider's returned `answer_text` as defence in depth, since
+this milestone cannot assume every future provider will honor `COACH_SYSTEM_PROMPT`'s instructions.
+Both paths are tested (`packages/domain/src/coach/safety.test.ts`,
+`apps/worker/test/coach-reply.test.ts`). This is an engineering placeholder, not a reviewed clinical
+safety policy — see the release gate below.
+
+**Async generation via the worker, like M4, not synchronous like M5/M6/M8.** `sendCoachMessage`
+(`apps/api/src/modules/coach/service.ts`) only inserts the user message, a pending assistant
+placeholder, and an `app.generation_requests` row (`request_type = 'coach_reply'`), exactly like M4's
+`createMealScan` — the same transactional-outbox relay (D-017) then hands it to a new `coach.reply`
+pg-boss queue, and `handleCoachReply` (`apps/worker/src/handlers/coach-reply.ts`) does the actual
+provider call. This was the right call, not just the consistent one: an external AI call is exactly the
+kind of bounded-but-sometimes-slow external request the blueprint's queue/retry/idempotency machinery
+(§13) already exists for, and it keeps the API request path free of a live provider call, matching the
+M4 precedent for "the one other milestone that calls an external AI provider" rather than M5/M6/M8's
+synchronous domain-only calculations. Idempotency: the handler is a no-op for an already-terminal
+request or an already-resolved message (identical shape to `meal-scan-analyze.ts`'s crash-recovery
+logic), and `sendCoachMessage` itself is idempotent on `client_id` even across different
+`Idempotency-Key` values, so a dropped response can never double-charge the daily quota or create two
+assistant replies for one user message.
+
+**Daily quota: five coach replies/day (blueprint §13's own proposed figure), via the existing
+`usage_reservations` mechanism** — identical pattern to M4's `MEAL_SCAN_DAILY_QUOTA`, same
+provisional-number caveat.
+
+**Retention: 90 days per the blueprint, not D-030's "until deletion" default.** Blueprint §14 is
+explicit and, unlike progress photos, different from the nutrition-log default: "coach history 90
+days." This milestone does not build the scheduled purge job that would enforce that automatically —
+same documented gap as M4's 90-day meal-image retention and M1-M8's other deferred cleanup jobs — but
+it does add `DELETE /v1/coach/threads/{id}` (a new, this-milestone-authored operation; cascades to the
+thread's messages and proposals via the FKs M1 already wrote), so a user can delete a conversation
+immediately rather than only after 90 days, matching the blueprint's broader "explicit deletion is
+always available sooner" posture (§14's account-deletion language) even though this milestone does not
+invent a scheduled-purge cron for the 90-day default.
+
+**Flutter.** `CoachScreen` replaces the M1-M8 placeholder with a real chat UI: a message list (user
+bubbles right-aligned, assistant left-aligned, a spinner bubble while `pending`), suggested-prompt
+chips shown until the first message, one structured card per message for each real meal/workout
+surfaced (`_CoachCardView`, built from the server's `cards` field — never free text), and a proposal
+card with explicit Confirm/Cancel buttons wired straight to `applyActionProposal`/`cancelActionProposal`
+(scope note 7: no proposal ever applies itself). `CoachController` mirrors `MealScanController`'s
+capture → processing → terminal polling convention, since a coach reply is generated the same way a
+meal scan is (a 202-accepted async job, not an immediate value). `TabPage` gained a `scrollable: false`
+mode (a plain `Column`, not a `ListView`) so a chat screen's message list can use `Expanded` above a
+pinned input bar — the first feature to need a full-height flex layout instead of the stock scrolling
+section list. `MockCoachRepository` provides clearly `(mock)`-labelled development replies, including
+its own tiny safety/swap heuristics, so the chat flow is exercisable without a server. No Stitch
+screens exist for the coach (same precedent as D-023 and M6-M8's equivalent notes), so the existing
+`lib/core/ui` component system is used throughout.
+
+**Voice/image input: explicitly out of scope, confirmed against the blueprint.** The blueprint's coach
+section (§4, §12, §16) describes only text messages, cards and proposals; it does not scope voice or
+image input into the coach for V1 (image input elsewhere in the app — meal photos — is its own M4
+feature, unrelated to chat). This milestone builds text-only chat and omits voice/image input rather
+than inventing scope the blueprint does not call for.
+
+**Catalog/AI-honesty note (carried from D-010/D-025/D-028/D-030, restated for this milestone's
+reviewer).** The coach never computes or states a nutrition or exercise number itself — every number a
+card or the surrounding app ever shows the user still comes from the approved catalog or the user's own
+recorded data via the same domain functions M3/M5/M6/M7 already use. `coachReply`'s mock implementation
+remains the only exercised path in this environment (no real provider key is available here, same as
+every prior AI-backed milestone); the factory still fails closed outside development/test exactly as
+D-010 established for `recognizeMeal`.
+
+**Release gate (open, carried forward).** A licensed/reviewed safety and clinical-scope policy must
+replace `checkSafety`'s keyword screen before production; `COACH_REPLY_DAILY_QUOTA` is the same kind of
+provisional engineering number as M4's `MEAL_SCAN_DAILY_QUOTA`; no scheduled 90-day coach-history purge
+job exists yet (user-initiated deletion is available now); and, as with every prior AI-backed
+milestone, a real provider adapter, key and model must be benchmarked and reviewed (blueprint §17)
+before `AI_PROVIDER=mock` is no longer the only exercised path. M10 is not started or scoped by this
+milestone.

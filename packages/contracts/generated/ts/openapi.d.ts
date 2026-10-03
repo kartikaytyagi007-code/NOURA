@@ -722,6 +722,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/coach/threads/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Delete an owned coach thread and its messages/proposals (D-031; user-initiated deletion). */
+    delete: operations['deleteCoachThread'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/coach/threads/{id}/messages': {
     parameters: {
       query?: never;
@@ -3603,6 +3620,33 @@ export interface operations {
         };
       };
       401: components['responses']['Unauthenticated'];
+    };
+  };
+  deleteCoachThread: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Client-generated key (UUID recommended). Replays return the original result. */
+        'Idempotency-Key': components['parameters']['IdempotencyKey'];
+      };
+      path: {
+        id: components['parameters']['IdPath'];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deleted. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DeletedResponse'];
+        };
+      };
+      401: components['responses']['Unauthenticated'];
+      404: components['responses']['NotFound'];
     };
   };
   listCoachMessages: {

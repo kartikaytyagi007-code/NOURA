@@ -33,3 +33,5 @@ export * from './workouts/inputs.js';
 export * from './workouts/storage.js';
 export * from './progress/weight.js';
 export * from './progress/adherence.js';
+export * from './coach/safety.js';
+export * from './coach/context.js';

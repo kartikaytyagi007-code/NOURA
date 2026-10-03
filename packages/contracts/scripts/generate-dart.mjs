@@ -3,7 +3,7 @@
 // then runs build_runner (json_serializable) and dart format so the committed output is stable.
 // Requires: Java 11+ (OpenAPI Generator), and the Flutter/Dart SDK on PATH.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,6 +14,11 @@ const out = path.resolve(pkg, '../../apps/mobile/packages/noura_api_client');
 const run = (cmd, args, cwd) =>
   execFileSync(cmd, args, { cwd, stdio: 'inherit', env: process.env });
 
+// The output directory is wiped so removed schemas disappear, but the committed pubspec.lock must
+// survive: without it `dart pub get` re-resolves to whatever pub.dev has published since, and the
+// drift check fails on unrelated dependency releases instead of on contract changes.
+const lockPath = path.join(out, 'pubspec.lock');
+const lock = existsSync(lockPath) ? readFileSync(lockPath, 'utf8') : null;
 rmSync(out, { recursive: true, force: true });
 run(
   'pnpm',
@@ -57,6 +62,7 @@ pubspec = pubspec
   .replace(/homepage: homepage\n/, '')
   .replace(/\s+test: '[^']+'/, '');
 writeFileSync(pubspecPath, pubspec);
+if (lock !== null) writeFileSync(lockPath, lock);
 run('dart', ['pub', 'get'], out);
 run('dart', ['run', 'build_runner', 'build', '--delete-conflicting-outputs'], out);
 run('dart', ['format', '.'], out);

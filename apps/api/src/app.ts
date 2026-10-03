@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { createBillingProvider, type BillingProvider } from '@noura/billing';
 import { createMediaStorage, type MediaStorage } from '@noura/domain';
 import Fastify, { LogController, type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { ApiConfig } from './config.js';
+import { registerAccountRoutes } from './modules/account/routes.js';
+import { registerBillingRoutes } from './modules/billing/routes.js';
 import { registerCoachRoutes } from './modules/coach/routes.js';
 import { registerDietRoutes } from './modules/diet/routes.js';
 import { registerHealthRoutes } from './modules/health/routes.js';
@@ -24,6 +27,8 @@ export interface AppDeps {
   verifyToken: TokenVerifier;
   /** Built from config automatically when omitted; tests may inject one (e.g. to pre-seed bytes). */
   media?: MediaStorage;
+  /** Built from config automatically when omitted (docs/decisions.md D-010 pattern). */
+  billing?: BillingProvider;
 }
 
 const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,128}$/;
@@ -80,7 +85,15 @@ export function buildApp(
         signingSecret: deps.config.media.devStorageSigningSecret,
       },
     });
-  const fullDeps: Required<AppDeps> = { ...deps, media };
+  const billing =
+    deps.billing ??
+    createBillingProvider({
+      appEnv: deps.config.appEnv,
+      provider: deps.config.billing.provider,
+      secretApiKey: deps.config.billing.secretApiKey,
+      webhookAuthorization: deps.config.billing.webhookAuthorization,
+    });
+  const fullDeps: Required<AppDeps> = { ...deps, media, billing };
 
   registerErrorHandling(app);
   registerHealthRoutes(app, fullDeps);
@@ -94,6 +107,8 @@ export function buildApp(
   registerWorkoutRoutes(app, fullDeps);
   registerProgressRoutes(app, fullDeps);
   registerCoachRoutes(app, fullDeps);
+  registerBillingRoutes(app, fullDeps);
+  registerAccountRoutes(app, fullDeps);
   // Development/test only: see modules/media/dev-storage.ts. Never registered when deployed.
   if (
     deps.config.appEnv !== 'staging' &&

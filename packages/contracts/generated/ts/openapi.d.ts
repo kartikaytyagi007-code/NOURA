@@ -109,6 +109,34 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/v1/me/notification-preferences': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Local-reminder consent and preferences.
+     * @description Backed by `app.user_preferences.reminder_settings` (an M1-provisioned jsonb column, unused
+     *     until this milestone). Reminders are local device notifications only after explicit opt-in
+     *     (blueprint §18: "No push infrastructure needed for V1") — there is no server-held push token.
+     */
+    get: operations['getNotificationPreferences'];
+    /**
+     * Replace local-reminder consent and preferences.
+     * @description Whole-object replacement, same revision contract as the other `/v1/me/*` preference
+     *     resources. Setting `consent_granted_at` happens only when the client sends a non-null value
+     *     (an explicit opt-in action), never implicitly.
+     */
+    put: operations['putNotificationPreferences'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/v1/onboarding/complete': {
     parameters: {
       query?: never;
@@ -1286,6 +1314,33 @@ export interface components {
     };
     TrainingPreferencesResponse: {
       data: components['schemas']['TrainingPreferences'];
+      meta: components['schemas']['Meta'];
+    };
+    NotificationPreferences: {
+      /** @description Preferences revision; 0 when none exist yet. */
+      revision: number;
+      meal_reminders_enabled: boolean;
+      workout_reminders_enabled: boolean;
+      /** @description Local 24-hour HH:MM, scheduled on the device in the profile timezone. */
+      meal_reminder_time: string | null;
+      workout_reminder_time: string | null;
+      /** Format: date-time */
+      consent_granted_at: string | null;
+    };
+    NotificationPreferencesInput: {
+      expected_revision: number;
+      meal_reminders_enabled: boolean;
+      workout_reminders_enabled: boolean;
+      meal_reminder_time?: string | null;
+      workout_reminder_time?: string | null;
+      /**
+       * Format: date-time
+       * @description Send a timestamp only when the user just opted in; omit/null otherwise.
+       */
+      consent_granted_at?: string | null;
+    };
+    NotificationPreferencesResponse: {
+      data: components['schemas']['NotificationPreferences'];
       meta: components['schemas']['Meta'];
     };
     /** @enum {string} */
@@ -2558,6 +2613,57 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TrainingPreferencesResponse'];
+        };
+      };
+      401: components['responses']['Unauthenticated'];
+      409: components['responses']['RevisionConflict'];
+      422: components['responses']['ValidationError'];
+    };
+  };
+  getNotificationPreferences: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current notification preferences. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NotificationPreferencesResponse'];
+        };
+      };
+      401: components['responses']['Unauthenticated'];
+    };
+  };
+  putNotificationPreferences: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Client-generated key (UUID recommended). Replays return the original result. */
+        'Idempotency-Key': components['parameters']['IdempotencyKey'];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NotificationPreferencesInput'];
+      };
+    };
+    responses: {
+      /** @description Saved notification preferences. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NotificationPreferencesResponse'];
         };
       };
       401: components['responses']['Unauthenticated'];

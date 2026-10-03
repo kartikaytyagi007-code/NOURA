@@ -30,6 +30,18 @@ export interface MediaStorage {
   /** Fetches the object's current bytes for server-side verification/recognition. Null if missing. */
   readObject(bucket: string, objectPath: string): Promise<Uint8Array | null>;
   deleteObject(bucket: string, objectPath: string): Promise<void>;
+  /**
+   * Writes bytes directly, server-side — used only for server-generated objects the client never
+   * uploads itself (M10: the account-data export manifest). Never used for user-submitted media,
+   * which always goes through the signed-upload-url flow above so the server can verify bytes/type
+   * before trusting them.
+   */
+  writeObject(
+    bucket: string,
+    objectPath: string,
+    bytes: Uint8Array,
+    contentType: string,
+  ): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -108,7 +120,12 @@ export class LocalMediaStorage implements MediaStorage {
   }
 
   /** Test/dev-only direct write, used by the dev-storage HTTP route and by tests that simulate an upload. */
-  async writeObject(bucket: string, objectPath: string, bytes: Uint8Array): Promise<void> {
+  async writeObject(
+    bucket: string,
+    objectPath: string,
+    bytes: Uint8Array,
+    _contentType?: string,
+  ): Promise<void> {
     const path = safeObjectPath(bucket, objectPath, this.options.baseDir);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, bytes);
@@ -226,6 +243,25 @@ export class SupabaseMediaStorage implements MediaStorage {
       },
     });
     if (!res.ok && res.status !== 404) throw new Error(`storage delete failed: ${res.status}`);
+  }
+
+  async writeObject(
+    bucket: string,
+    objectPath: string,
+    bytes: Uint8Array,
+    contentType: string,
+  ): Promise<void> {
+    const res = await this.fetchImpl(`${this.base}/storage/v1/object/${bucket}/${objectPath}`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${this.options.serviceRoleKey}`,
+        apikey: this.options.serviceRoleKey,
+        'content-type': contentType,
+        'x-upsert': 'true',
+      },
+      body: bytes,
+    });
+    if (!res.ok) throw new Error(`storage write failed: ${res.status}`);
   }
 }
 

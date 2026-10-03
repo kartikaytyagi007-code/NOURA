@@ -788,3 +788,105 @@ describe('M8 progress-photo retention (D-030: no auto-expiry, unlike meal images
     expect(rows.find((r) => r.id === mealId)?.expires_at).not.toBeNull();
   });
 });
+
+describe('M10 entitlements/usage/export/deletion owner isolation (user A vs user B)', () => {
+  let userA: string;
+  let userB: string;
+  let exportB: string;
+  let deletionB: string;
+
+  beforeAll(async () => {
+    userA = await createAuthUser();
+    userB = await createAuthUser();
+    exportB = randomUUID();
+    deletionB = randomUUID();
+    await asOwner(async (c) => {
+      await c.query(
+        `insert into app.entitlements (user_id, entitlement_key, provider_status, is_active, last_verified_at)
+         values ($1, 'premium', 'active', true, now())`,
+        [userB],
+      );
+      await c.query(
+        `insert into app.usage_reservations (user_id, feature, quota_period, request_id, state, expires_at)
+         values ($1, 'meal_scan', '2026-01-01', $2, 'reserved', now() + interval '1 day')`,
+        [userB, randomUUID()],
+      );
+      await c.query(
+        `insert into app.export_requests (id, user_id, state) values ($1, $2, 'queued')`,
+        [exportB, userB],
+      );
+      await c.query(
+        `insert into app.deletion_requests (id, user_id, state) values ($1, $2, 'requested')`,
+        [deletionB, userB],
+      );
+    });
+  });
+
+  it('cannot read, update or insert another user’s entitlements or usage reservations', async () => {
+    const reads = await asRole('noura_api', userA, async (c) => {
+      const ent = await c.query('select 1 from app.entitlements where user_id = $1', [userB]);
+      const usage = await c.query('select 1 from app.usage_reservations where user_id = $1', [
+        userB,
+      ]);
+      return { ent: ent.rowCount, usage: usage.rowCount };
+    });
+    expect(reads).toEqual({ ent: 0, usage: 0 });
+
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query(
+          `insert into app.entitlements (user_id, entitlement_key, provider_status, is_active, last_verified_at)
+           values ($1, 'premium', 'active', true, now())`,
+          [userB],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('cannot read or dispatch-update another user’s export/deletion requests through the API role', async () => {
+    const reads = await asRole('noura_api', userA, async (c) => {
+      const exp = await c.query('select 1 from app.export_requests where id = $1', [exportB]);
+      const del = await c.query('select 1 from app.deletion_requests where id = $1', [deletionB]);
+      return { exp: exp.rowCount, del: del.rowCount };
+    });
+    expect(reads).toEqual({ exp: 0, del: 0 });
+  });
+
+  it('lets the worker relay see and dispatch any still-queued export/deletion request, but guards every other column', async () => {
+    const seen = await asRole('noura_worker', null, async (c) => {
+      const exp = await c.query('select 1 from app.export_requests where id = $1', [exportB]);
+      const del = await c.query('select 1 from app.deletion_requests where id = $1', [deletionB]);
+      return { exp: exp.rowCount, del: del.rowCount };
+    });
+    expect(seen).toEqual({ exp: 1, del: 1 });
+
+    await expect(
+      asRole('noura_worker', null, (c) =>
+        c.query(`update app.export_requests set state = 'completed' where id = $1`, [exportB]),
+      ),
+    ).rejects.toThrow(/relay may only record queue dispatch/);
+    await expect(
+      asRole('noura_worker', null, (c) =>
+        c.query(`update app.deletion_requests set state = 'completed' where id = $1`, [deletionB]),
+      ),
+    ).rejects.toThrow(/relay may only record queue dispatch/);
+
+    // The dispatch columns themselves are allowed.
+    await asRole('noura_worker', null, (c) =>
+      c.query(
+        `update app.export_requests set queue_name = 'account.export', queue_job_id = $1 where id = $1`,
+        [exportB],
+      ),
+    );
+  });
+
+  it('once a request is no longer queued, the relay-visibility policy no longer matches it', async () => {
+    await asOwner((c) =>
+      c.query(`update app.export_requests set state = 'completed' where id = $1`, [exportB]),
+    );
+    const { rowCount } = await asRole('noura_worker', null, (c) =>
+      c.query('select 1 from app.export_requests where id = $1', [exportB]),
+    );
+    expect(rowCount).toBe(0);
+  });
+});

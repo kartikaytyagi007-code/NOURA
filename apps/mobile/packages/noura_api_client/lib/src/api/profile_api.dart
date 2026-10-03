@@ -11,6 +11,8 @@ import 'package:dio/dio.dart';
 
 import 'package:noura_api_client/src/model/error_response.dart';
 import 'package:noura_api_client/src/model/me_response.dart';
+import 'package:noura_api_client/src/model/notification_preferences_input.dart';
+import 'package:noura_api_client/src/model/notification_preferences_response.dart';
 import 'package:noura_api_client/src/model/onboarding_complete_request.dart';
 import 'package:noura_api_client/src/model/onboarding_complete_response.dart';
 import 'package:noura_api_client/src/model/preferences_input.dart';
@@ -197,6 +199,80 @@ class ProfileApi {
     );
   }
 
+  /// Local-reminder consent and preferences.
+  /// Backed by &#x60;app.user_preferences.reminder_settings&#x60; (an M1-provisioned jsonb column, unused until this milestone). Reminders are local device notifications only after explicit opt-in (blueprint §18: \&quot;No push infrastructure needed for V1\&quot;) — there is no server-held push token.
+  ///
+  /// Parameters:
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [NotificationPreferencesResponse] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<NotificationPreferencesResponse>> getNotificationPreferences({
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/v1/me/notification-preferences';
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{...?headers},
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearerAuth'},
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    NotificationPreferencesResponse? _responseData;
+
+    try {
+      final rawData = _response.data;
+      _responseData = rawData == null
+          ? null
+          : deserialize<
+              NotificationPreferencesResponse,
+              NotificationPreferencesResponse
+            >(rawData, 'NotificationPreferencesResponse', growable: true);
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<NotificationPreferencesResponse>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Current nutrition target snapshot.
   ///
   ///
@@ -358,6 +434,102 @@ class ProfileApi {
     }
 
     return Response<MeResponse>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Replace local-reminder consent and preferences.
+  /// Whole-object replacement, same revision contract as the other &#x60;/v1/me/_*&#x60; preference resources. Setting &#x60;consent_granted_at&#x60; happens only when the client sends a non-null value (an explicit opt-in action), never implicitly.
+  ///
+  /// Parameters:
+  /// * [idempotencyKey] - Client-generated key (UUID recommended). Replays return the original result.
+  /// * [notificationPreferencesInput]
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [NotificationPreferencesResponse] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<NotificationPreferencesResponse>> putNotificationPreferences({
+    required String idempotencyKey,
+    required NotificationPreferencesInput notificationPreferencesInput,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/v1/me/notification-preferences';
+    final _options = Options(
+      method: r'PUT',
+      headers: <String, dynamic>{
+        r'Idempotency-Key': idempotencyKey,
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {'type': 'http', 'scheme': 'bearer', 'name': 'bearerAuth'},
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      _bodyData = jsonEncode(notificationPreferencesInput);
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _options.compose(_dio.options, _path),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    NotificationPreferencesResponse? _responseData;
+
+    try {
+      final rawData = _response.data;
+      _responseData = rawData == null
+          ? null
+          : deserialize<
+              NotificationPreferencesResponse,
+              NotificationPreferencesResponse
+            >(rawData, 'NotificationPreferencesResponse', growable: true);
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<NotificationPreferencesResponse>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

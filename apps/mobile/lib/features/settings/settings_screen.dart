@@ -6,7 +6,6 @@ import '../../app/routes.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/profile/session_profile.dart';
 import '../../core/providers.dart';
-import '../../core/ui/components/feature_placeholder.dart';
 import '../../core/ui/components/n_button.dart';
 import '../../core/ui/tokens.dart';
 
@@ -62,22 +61,24 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           const SizedBox(height: NSpace.lg),
-          const FeaturePlaceholder(
-            title: 'Reminders',
-            milestone: 'M10',
-            description: 'Local meal and workout reminders after you opt in.',
-          ),
+          Text('Subscription and data', style: theme.textTheme.titleMedium),
           const SizedBox(height: NSpace.sm),
-          const FeaturePlaceholder(
-            title: 'Purchases and restore',
-            milestone: 'M10',
-            description: 'Subscription status and restoring purchases.',
-          ),
-          const SizedBox(height: NSpace.sm),
-          const FeaturePlaceholder(
-            title: 'Export and delete account',
-            milestone: 'M10',
-            description: 'Download your data or delete your account.',
+          Card(
+            child: Column(
+              children: [
+                for (final (icon, label, route) in const [
+                  (Icons.notifications_outlined, 'Reminders', Routes.settingsReminders),
+                  (Icons.workspace_premium_outlined, 'Purchases and restore', Routes.settingsBilling),
+                  (Icons.download_outlined, 'Export and delete account', Routes.settingsAccountData),
+                ])
+                  ListTile(
+                    leading: Icon(icon),
+                    title: Text(label),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push(route),
+                  ),
+              ],
+            ),
           ),
           const SizedBox(height: NSpace.lg),
           NButton(

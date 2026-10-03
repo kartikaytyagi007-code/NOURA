@@ -1,0 +1,25 @@
+{
+  "name": "@noura/billing",
+  "private": true,
+  "type": "module",
+  "description": "Billing/entitlement provider adapter boundary (server-side only), plus the auth-admin adapter account deletion uses to remove the Supabase identity. Mirrors @noura/ai's mock-first, fail-closed pattern (docs/decisions.md D-010, D-03x).",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noura/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "5.0.3"
+  }
+}

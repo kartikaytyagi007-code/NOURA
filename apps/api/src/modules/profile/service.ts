@@ -520,3 +520,94 @@ export async function completeOnboarding(
 
   return { me: await loadMe(client, userId), job_ids: jobIds };
 }
+
+// -------------------------------------------------------------------- notification preferences
+
+/**
+ * Local-reminder consent and preferences (M10; blueprint §18 "local device notifications after
+ * opt-in"). Backed by `app.user_preferences.reminder_settings`, an M1-provisioned jsonb column that
+ * was unused until this milestone — no migration needed. Shares `user_preferences`' own revision
+ * counter with diet preferences (the same row), a deliberate scope decision recorded in
+ * docs/decisions.md rather than a new per-resource revision column.
+ */
+interface NotificationPreferencesRow {
+  revision: number;
+  reminder_settings: Record<string, unknown> | null;
+}
+
+function toNotificationPreferences(
+  row: NotificationPreferencesRow,
+): Schemas['NotificationPreferences'] {
+  const s = row.reminder_settings ?? {};
+  const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  return {
+    revision: row.revision,
+    meal_reminders_enabled: Boolean(s['meal_reminders_enabled']),
+    workout_reminders_enabled: Boolean(s['workout_reminders_enabled']),
+    meal_reminder_time: str(s['meal_reminder_time']),
+    workout_reminder_time: str(s['workout_reminder_time']),
+    consent_granted_at: str(s['consent_granted_at']),
+  };
+}
+
+export async function getNotificationPreferences(
+  client: Queryable,
+  userId: string,
+): Promise<Schemas['NotificationPreferences']> {
+  await ensureProfile(client, userId);
+  const row = (
+    await client.query<NotificationPreferencesRow>(
+      `select revision, reminder_settings from app.user_preferences where user_id = $1`,
+      [userId],
+    )
+  ).rows[0];
+  if (!row) {
+    return {
+      revision: 0,
+      meal_reminders_enabled: false,
+      workout_reminders_enabled: false,
+      meal_reminder_time: null,
+      workout_reminder_time: null,
+      consent_granted_at: null,
+    };
+  }
+  return toNotificationPreferences(row);
+}
+
+export async function putNotificationPreferences(
+  client: Queryable,
+  userId: string,
+  body: Schemas['NotificationPreferencesInput'],
+): Promise<Schemas['NotificationPreferences']> {
+  await ensureProfile(client, userId);
+  // consent_granted_at is sticky: only merged in when the client explicitly sends a value (the opt-in
+  // action itself), so toggling reminders off and on again never silently re-grants or revokes it.
+  const patch: Record<string, unknown> = {
+    meal_reminders_enabled: body.meal_reminders_enabled,
+    workout_reminders_enabled: body.workout_reminders_enabled,
+    meal_reminder_time: body.meal_reminder_time ?? null,
+    workout_reminder_time: body.workout_reminder_time ?? null,
+  };
+  if (body.consent_granted_at) patch['consent_granted_at'] = body.consent_granted_at;
+
+  const result =
+    body.expected_revision === 0
+      ? await client.query<NotificationPreferencesRow>(
+          `insert into app.user_preferences (user_id, reminder_settings)
+           values ($1, $2::jsonb)
+           on conflict (user_id) do nothing
+           returning revision, reminder_settings`,
+          [userId, JSON.stringify(patch)],
+        )
+      : await client.query<NotificationPreferencesRow>(
+          `update app.user_preferences
+             set reminder_settings = coalesce(reminder_settings, '{}'::jsonb) || $3::jsonb,
+                 revision = revision + 1
+           where user_id = $1 and revision = $2
+           returning revision, reminder_settings`,
+          [userId, body.expected_revision, JSON.stringify(patch)],
+        );
+  const saved = result.rows[0];
+  if (!saved) throw conflict('notification preferences');
+  return toNotificationPreferences(saved);
+}

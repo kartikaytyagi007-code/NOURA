@@ -18,7 +18,7 @@ export function registerMealRoutes(app: FastifyInstance, deps: Required<AppDeps>
     const data = await withIdempotency(
       deps.db,
       { userId, route: 'createMealScan', key: idempotencyKeyFrom(request), body },
-      (client) => createMealScan(client, userId, body),
+      (client) => createMealScan(client, userId, body, deps.config.quotas.mealScan),
     );
     reply.code(202);
     return { data, meta: { request_id: request.id } };

@@ -1118,3 +1118,15 @@ to a future milestone, because there is no M11.
 (§16) as of this commit, pending the release gates in `docs/release-checklist.md` — every one of which
 requires real external accounts/credentials or a physical device/store this sandboxed environment does
 not have, not further engineering work inside this repository.
+
+---
+
+## Post-V1 change · Phone number + SMS code sign-in (D-033)
+
+Owner-requested change after M10: sign-in is phone + one-time SMS code only. Email/password,
+email verification, password recovery and Google/Apple sign-in are removed from the app and the
+local Supabase config. Backend, worker, OpenAPI contract and migrations needed no change (no auth
+operations in the contract, no email stored in the schema). See D-033 and `docs/auth-providers.md`.
+
+Checks run for this change are recorded in the pull request. Live Supabase phone auth and real SMS
+delivery are **not run**: they need the owner's Supabase project and an SMS gateway account.

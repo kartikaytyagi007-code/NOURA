@@ -27,7 +27,7 @@ final class ProfileReady extends ProfileGate {
 /// cold start → restore auth → signed out: welcome/auth screens;
 /// signed in with unfinished onboarding → onboarding (resume step is M2);
 /// completed profile → app shell. A profile that cannot be loaded never traps the user: they get
-/// a recoverable error screen with retry and sign-out. Password recovery always wins.
+/// a recoverable error screen with retry and sign-out.
 String? resolveRedirect({
   required String location,
   required AuthStatus auth,
@@ -39,10 +39,8 @@ String? resolveRedirect({
   switch (auth) {
     case AuthRestoring():
       return goTo(Routes.splash);
-    case PasswordRecovery():
-      return goTo(Routes.updatePassword);
     case SignedOut():
-      if (Routes.isPublic(location) && location != Routes.updatePassword) return null;
+      if (Routes.isPublic(location)) return null;
       return goTo(Routes.welcome);
     case SignedIn():
       switch (profile) {

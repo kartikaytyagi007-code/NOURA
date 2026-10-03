@@ -2,11 +2,14 @@ import 'auth_state.dart';
 
 /// Authentication boundary. The app talks to Supabase directly only for authentication
 /// (blueprint §2); every domain read/write goes through the NOURA API.
+///
+/// Sign-in is phone number + one-time SMS code only (decision D-033): there are no passwords, no
+/// email accounts and no social providers. The same two calls create the account on first use.
 abstract interface class AuthRepository {
   /// Current status, available synchronously after initialization (restored session or none).
   AuthStatus get current;
 
-  /// Emits whenever the status changes (sign-in, sign-out, token refresh failure, recovery link).
+  /// Emits whenever the status changes (sign-in, sign-out, token refresh failure).
   Stream<AuthStatus> get changes;
 
   /// Current access token, or null when signed out. Refreshed automatically by the SDK.
@@ -15,15 +18,12 @@ abstract interface class AuthRepository {
   /// Forces a token refresh. Returns false when the session can no longer be refreshed.
   Future<bool> refreshSession();
 
-  Future<void> signInWithEmail({required String email, required String password});
-  Future<SignUpResult> signUpWithEmail({required String email, required String password});
-  Future<void> resendVerificationEmail({required String email});
-  Future<void> sendPasswordReset({required String email});
-  Future<void> updatePassword({required String newPassword});
+  /// Sends a one-time code by SMS to [phone] (E.164, e.g. `+919876543210`). Creates the account on
+  /// first use, so there is no separate sign-up step.
+  Future<void> sendPhoneOtp({required String phone});
 
-  /// Starts a Google/Apple sign-in. Returns when the provider flow was launched; the result
-  /// arrives through [changes] (or never, if the user cancels in the browser).
-  Future<void> signInWithProvider(SocialProvider provider);
+  /// Verifies the code sent to [phone]. On success the session arrives through [changes].
+  Future<void> verifyPhoneOtp({required String phone, required String code});
 
   Future<void> signOut({SignOutReason? reason});
 }

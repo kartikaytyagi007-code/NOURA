@@ -183,6 +183,9 @@ shutdown is graceful.
 **Status.** The code is integrated but **not verified against live providers**. That needs the
 owner's accounts.
 
+**Superseded by D-033.** Google and Apple sign-in were removed when sign-in became phone + SMS code
+only.
+
 ## D-012 · Plain-Postgres test harness with a Supabase shim (M1)
 
 **Decision.**
@@ -1291,3 +1294,45 @@ wants more than the opt-in-but-unwired telemetry interface shipped here; a real
 review of M9's `checkSafety` (carried from D-025–D-031); Android/iOS builds and app-store accounts; a
 production backup/restore drill that respects deletion tombstones (blueprint §14). This is the last V1
 milestone — there is no M11 to carry open items into; `docs/release-checklist.md` is where they now live.
+
+## D-033 · Phone number + SMS one-time code is the only sign-in method (post-M10, owner request)
+
+**Decision.** At the owner's request, NOURA signs users in with a phone number and a 6-digit SMS
+code only. Email/password sign-up and sign-in, email verification, password reset/update, and
+Google/Apple OAuth (D-011) are removed. This supersedes blueprint §1 "Email/password, password
+recovery, Google and Apple authentication" and the §5 auth screen list (both edited to point here).
+
+- **One flow for new and returning users.** `AuthRepository.sendPhoneOtp` calls Supabase
+  `signInWithOtp(phone, shouldCreateUser: true)`; `verifyPhoneOtp` calls `verifyOTP(type: sms)`.
+  The first successful verification creates the `auth.users` row, so there is no sign-up screen.
+- **Sessions.** Unchanged mechanism: `supabase_flutter` persists and refreshes the session. It lasts
+  until the user signs out or it can no longer be refreshed; then the existing
+  `SignedOut(reason: sessionExpired)` path returns the user to welcome and they verify a new code.
+  No hard session limit is configured (a paid Supabase plan feature; release decision).
+- **Phone numbers.** The app sends E.164. A bare 10-digit Indian mobile number (starting 6-9,
+  optional leading 0) gets `+91`; any other country is typed with `+`. Supabase stores the number
+  without `+`; the app adds it back for display. Client checks are for fast feedback only.
+- **Development.** `MockAuthRepository` sends nothing and accepts only `123456` for the number it was
+  asked to send to. Local Supabase has one `[auth.sms.test_otp]` number. Mocks stay
+  development-debug-only (D-010).
+- **Removed configuration.** `NOURA_AUTH_REDIRECT_URL`, `NOURA_GOOGLE_SIGN_IN_ENABLED`,
+  `NOURA_APPLE_SIGN_IN_ENABLED`, and the `noura://auth-callback` deep link on Android/iOS (it only
+  served email links and OAuth).
+
+**Affected contracts and migrations.** None. The OpenAPI contract has no auth operations (the app
+talks to Supabase Auth directly, blueprint §2), the API identifies users only by the verified JWT
+`sub` (D-007), and no table stores an email address. RevenueCat `app_user_id`, export and account
+deletion (`AuthAdminProvider.deleteUser`) all key on the user UUID and work unchanged for phone
+users. `requireRecentAuth` keeps working: a stale token means "verify a new code" instead of
+"sign in with your password".
+
+**Tests.** `apps/mobile/test/core/phone_auth_test.dart` (normalization, code format, mock
+verification, Supabase error mapping); `apps/mobile/test/features/app_flow_test.dart` (phone → code
+→ onboarding, wrong code, resend cooldown, change number, no password/email text on welcome,
+session-ended message); `route_guard_test.dart` (public auth routes).
+
+**Scope impact the owner will see.** Welcome shows one button, "Continue with phone number". Settings
+shows the signed-in phone number instead of an email. Every sign-in costs one SMS. Going live needs
+an SMS gateway account configured in Supabase and, for Indian numbers, TRAI DLT registration of the
+sender and template (see `docs/auth-providers.md`). Not verified against a live Supabase project or
+SMS gateway in this environment.

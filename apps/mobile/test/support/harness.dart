@@ -23,19 +23,13 @@ AppConfig testConfig({
   String apiBaseUrl = 'http://127.0.0.1:8080',
   String supabaseUrl = 'http://127.0.0.1:54321',
   String publishableKey = 'sb_publishable_placeholder',
-  String redirect = 'noura://auth-callback',
-  bool google = false,
-  bool apple = false,
 }) => AppConfig(
   environment: environment,
   environmentName: environment?.name ?? 'bogus',
   apiBaseUrl: apiBaseUrl,
   supabaseUrl: supabaseUrl,
   supabasePublishableKey: publishableKey,
-  authRedirectUrl: redirect,
   useMocks: useMocks,
-  googleSignInEnabled: google,
-  appleSignInEnabled: apple,
   devBypassOnboarding: devBypassOnboarding,
 );
 
@@ -77,21 +71,15 @@ class RecordingAuthRepository extends MockAuthRepository {
   final calls = <String>[];
 
   @override
-  Future<void> signInWithEmail({required String email, required String password}) {
-    calls.add('signIn:$email');
-    return super.signInWithEmail(email: email, password: password);
+  Future<void> sendPhoneOtp({required String phone}) {
+    calls.add('sendOtp:$phone');
+    return super.sendPhoneOtp(phone: phone);
   }
 
   @override
-  Future<void> sendPasswordReset({required String email}) {
-    calls.add('reset:$email');
-    return super.sendPasswordReset(email: email);
-  }
-
-  @override
-  Future<void> updatePassword({required String newPassword}) {
-    calls.add('updatePassword');
-    return super.updatePassword(newPassword: newPassword);
+  Future<void> verifyPhoneOtp({required String phone, required String code}) {
+    calls.add('verifyOtp:$phone:$code');
+    return super.verifyPhoneOtp(phone: phone, code: code);
   }
 
   @override
@@ -101,7 +89,7 @@ class RecordingAuthRepository extends MockAuthRepository {
   }
 }
 
-const signedIn = SignedIn(userId: MockAuthRepository.mockUserId, email: 'asha@example.com');
+const signedIn = SignedIn(userId: MockAuthRepository.mockUserId, phone: '+919876543210');
 
 Future<void> pumpNoura(
   WidgetTester tester, {

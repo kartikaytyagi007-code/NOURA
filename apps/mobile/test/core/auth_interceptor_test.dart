@@ -43,7 +43,7 @@ class ScriptedAdapter implements HttpClientAdapter {
 /// Mock auth whose token rotates on refresh, and whose refresh can be made to fail.
 class RotatingAuth extends MockAuthRepository {
   RotatingAuth({this.refreshSucceeds = true})
-    : super(initial: const SignedIn(userId: MockAuthRepository.mockUserId, email: null));
+    : super(initial: const SignedIn(userId: MockAuthRepository.mockUserId, phone: null));
   bool refreshSucceeds;
   int generation = 1;
   SignOutReason? signedOutWith;

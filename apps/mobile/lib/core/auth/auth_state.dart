@@ -19,31 +19,20 @@ final class SignedOut extends AuthStatus {
 }
 
 final class SignedIn extends AuthStatus {
-  const SignedIn({required this.userId, required this.email});
+  const SignedIn({required this.userId, required this.phone});
   final String userId;
-  final String? email;
+
+  /// The verified phone number in E.164 form, when the auth provider returns it.
+  final String? phone;
 
   @override
-  bool operator ==(Object other) => other is SignedIn && other.userId == userId && other.email == email;
+  bool operator ==(Object other) => other is SignedIn && other.userId == userId && other.phone == phone;
 
   @override
-  int get hashCode => Object.hash(userId, email);
-}
-
-/// The user opened a password-recovery link and must choose a new password.
-final class PasswordRecovery extends AuthStatus {
-  const PasswordRecovery();
+  int get hashCode => Object.hash(userId, phone);
 }
 
 enum SignOutReason { sessionExpired }
-
-enum SocialProvider { google, apple }
-
-@immutable
-class SignUpResult {
-  const SignUpResult({required this.needsEmailVerification});
-  final bool needsEmailVerification;
-}
 
 /// A user-safe authentication failure. [message] is shown in the UI as is.
 class AuthFailure implements Exception {

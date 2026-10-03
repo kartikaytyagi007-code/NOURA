@@ -17,7 +17,7 @@ class SettingsScreen extends ConsumerWidget {
     final auth = ref.watch(authControllerProvider);
     final config = ref.watch(appConfigProvider);
     final theme = Theme.of(context);
-    final email = auth is SignedIn ? auth.email : null;
+    final phone = auth is SignedIn ? auth.phone : null;
     final onboardingDone = ref.watch(sessionProfileProvider).value?.onboarding == OnboardingState.completed;
 
     return Scaffold(
@@ -27,7 +27,7 @@ class SettingsScreen extends ConsumerWidget {
         children: [
           Text('Account', style: theme.textTheme.titleMedium),
           const SizedBox(height: NSpace.sm),
-          Text(email ?? 'Signed in', style: theme.textTheme.bodyLarge),
+          Text(phone ?? 'Signed in', style: theme.textTheme.bodyLarge),
           Text(
             'Environment: ${config.environment?.name ?? 'unknown'}${config.useMocks ? ' (development mocks)' : ''}',
             style: theme.textTheme.bodySmall?.copyWith(color: NColors.onSurfaceVariant),

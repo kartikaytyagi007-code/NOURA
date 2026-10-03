@@ -77,7 +77,7 @@ void main() {
     final repo = _FakeRepo(home: _home());
     final container = _container(
       repo: repo,
-      auth: const SignedIn(userId: 'user-1', email: 'a@example.com'),
+      auth: const SignedIn(userId: 'user-1', phone: '+919876543210'),
     );
     final home = await container.read(homeControllerProvider.future);
     expect(home, isNotNull);
@@ -89,7 +89,7 @@ void main() {
     final repo = _FakeRepo(home: _home(complete: false));
     final container = _container(
       repo: repo,
-      auth: const SignedIn(userId: 'user-1', email: 'a@example.com'),
+      auth: const SignedIn(userId: 'user-1', phone: '+919876543210'),
     );
     final home = await container.read(homeControllerProvider.future);
     expect(home!.nutrition.coverage.complete, isFalse);
@@ -102,7 +102,7 @@ void main() {
     final repo = _FakeRepo(home: _home());
     final container = _container(
       repo: repo,
-      auth: const SignedIn(userId: 'user-1', email: 'a@example.com'),
+      auth: const SignedIn(userId: 'user-1', phone: '+919876543210'),
     );
     await container.read(homeControllerProvider.future);
     await container.read(homeControllerProvider.notifier).reload();

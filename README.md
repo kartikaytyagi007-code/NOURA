@@ -39,7 +39,7 @@ pnpm -r --filter './packages/*' run build        # shared packages used by API/w
 
 ```bash
 scripts/supabase-local-signing-key.sh            # local ES256 key so tokens verify via JWKS
-cp supabase/.env.example supabase/.env           # optional Google/Apple placeholders
+cp supabase/.env.example supabase/.env           # optional SMS gateway placeholder
 pnpm exec supabase start                         # prints the local publishable key
 pnpm exec supabase db reset                      # applies supabase/migrations
 cp apps/api/.env.example apps/api/.env
@@ -55,7 +55,8 @@ DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/noura_dev pnpm db:res
 ```
 
 This applies a test-only Supabase shim plus all migrations. It is enough for the API, worker and
-tests. Real sign-in needs a Supabase Auth instance (Option A or a hosted project).
+tests. Real sign-in (phone + SMS code, D-033) needs a Supabase Auth instance (Option A or a hosted
+project); with mocks the code is `123456`.
 
 ### Mobile
 

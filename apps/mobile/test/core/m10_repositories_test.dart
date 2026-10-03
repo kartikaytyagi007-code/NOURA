@@ -40,7 +40,7 @@ class _Adapter implements HttpClientAdapter {
 class _Auth extends MockAuthRepository {
   _Auth()
     : super(
-        initial: const SignedIn(userId: MockAuthRepository.mockUserId, email: 'a@example.com'),
+        initial: const SignedIn(userId: MockAuthRepository.mockUserId, phone: '+919876543210'),
       );
   @override
   Future<String?> accessToken() async => 'token';

@@ -2,11 +2,8 @@
 abstract final class Routes {
   static const splash = '/splash';
   static const welcome = '/welcome';
-  static const signIn = '/auth/sign-in';
-  static const signUp = '/auth/sign-up';
-  static const verifyEmail = '/auth/verify-email';
-  static const forgotPassword = '/auth/forgot-password';
-  static const updatePassword = '/auth/update-password';
+  static const signIn = '/auth/phone';
+  static const verifyOtp = '/auth/verify-code';
   static const onboarding = '/onboarding';
   static const sessionError = '/session-error';
   static const settings = '/settings';

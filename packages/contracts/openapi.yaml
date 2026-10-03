@@ -731,7 +731,7 @@ paths:
       summary: Request weekly workout plan generation.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -755,7 +755,7 @@ paths:
       summary: Active weekly workout plan.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       responses:
         '200':
           description: Week and session prescriptions.
@@ -770,7 +770,7 @@ paths:
       summary: Compatible exercise substitutions.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
       responses:
@@ -787,7 +787,7 @@ paths:
       summary: Start a workout log for a session.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -810,7 +810,7 @@ paths:
       summary: Save set logs for a workout.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -835,7 +835,7 @@ paths:
       summary: Mark a workout completed, skipped or abandoned.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'

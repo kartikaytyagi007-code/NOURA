@@ -11,6 +11,8 @@ export const QUEUES = {
   dietPlanGenerate: 'diet-plan.generate',
   /** Meal-photo recognition (blueprint §8). The handler arrives in M4. */
   mealScanAnalyze: 'meal-scan.analyze',
+  /** Weekly workout-plan generation (blueprint §11). The handler arrives in M7. */
+  workoutPlanGenerate: 'workout-plan.generate',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -20,6 +22,7 @@ export interface QueuePayloads {
   /** IDs only (blueprint §2): the request row holds everything else. */
   'diet-plan.generate': { generation_request_id: string; user_id: string };
   'meal-scan.analyze': { generation_request_id: string; user_id: string };
+  'workout-plan.generate': { generation_request_id: string; user_id: string };
 }
 
 export interface QueuePolicy {
@@ -62,6 +65,14 @@ export const QUEUE_POLICIES: Record<QueueName, QueuePolicy> = {
     retentionDays: 14,
     deadLetter: DEAD_LETTER_QUEUE,
   },
+  'workout-plan.generate': {
+    retryLimit: 3,
+    retryDelaySeconds: 10,
+    retryBackoff: true,
+    expireInSeconds: 600,
+    retentionDays: 14,
+    deadLetter: DEAD_LETTER_QUEUE,
+  },
 };
 
 /** Maps generation_requests.request_type to the queue that serves it (types without a queue yet are omitted). */
@@ -69,6 +80,7 @@ export const GENERATION_REQUEST_QUEUES = {
   diet_plan: QUEUES.dietPlanGenerate,
   plan_regeneration: QUEUES.dietPlanGenerate,
   meal_scan: QUEUES.mealScanAnalyze,
+  workout_plan: QUEUES.workoutPlanGenerate,
 } as const satisfies Record<string, QueueName>;
 
 export function isQueueName(value: string): value is QueueName {

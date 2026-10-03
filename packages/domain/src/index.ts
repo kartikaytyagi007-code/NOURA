@@ -26,3 +26,8 @@ export * from './meals/recommendations.js';
 export * from './meals/next-meal.js';
 export * from './meals/nutrition-patterns.js';
 export * from './time/timezone.js';
+export * from './workouts/eligibility.js';
+export * from './workouts/substitutions.js';
+export * from './workouts/generate.js';
+export * from './workouts/inputs.js';
+export * from './workouts/storage.js';

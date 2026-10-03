@@ -48,3 +48,28 @@ export interface CatalogRecipe {
   quality_flag: QualityFlag;
   ingredients: CatalogIngredient[];
 }
+
+export type ExperienceLevel = 'beginner' | 'intermediate' | 'advanced';
+export type TrainingLocation = 'home' | 'gym' | 'both';
+
+/**
+ * Mirrors `app.exercises` (blueprint §11, M1 schema, M7 generation, docs/decisions.md D-029).
+ * `equipment_tags` empty means a bodyweight-only movement, always available regardless of location.
+ */
+export interface CatalogExercise {
+  id: string;
+  slug: string;
+  name: string;
+  movement_pattern: string;
+  muscle_tags: string[];
+  equipment_tags: string[];
+  level: ExperienceLevel;
+  contraindication_tags: string[];
+  instructions: string[];
+  quality_flag: QualityFlag;
+}
+
+export interface CatalogExerciseSubstitution {
+  exercise_id: string;
+  substitute_id: string;
+}

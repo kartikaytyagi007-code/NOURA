@@ -1,5 +1,11 @@
 import type { Queryable } from '../db/user-transaction.js';
-import type { CatalogFood, CatalogRecipe, DietType } from './types.js';
+import type {
+  CatalogExercise,
+  CatalogExerciseSubstitution,
+  CatalogFood,
+  CatalogRecipe,
+  DietType,
+} from './types.js';
 
 interface RecipeIngredientRow {
   recipe_id: string;
@@ -140,4 +146,51 @@ export async function loadCatalogFoods(db: Queryable): Promise<CatalogFood[]> {
     quality_flag: row.quality_flag,
     serving_conversions: row.serving_conversions,
   }));
+}
+
+interface ExerciseRow {
+  id: string;
+  slug: string;
+  name: string;
+  movement_pattern: string;
+  muscle_tags: string[];
+  equipment_tags: string[];
+  level: CatalogExercise['level'];
+  contraindication_tags: string[];
+  instructions: string[];
+  quality_flag: CatalogExercise['quality_flag'];
+}
+
+/**
+ * The exercise catalog (blueprint §11, docs/decisions.md D-029), read the same way for the API
+ * (substitutions, the current workout plan) and the worker (generation) so both see an identical
+ * pool. Read-only reference data, like `loadCatalogRecipes`/`loadCatalogFoods`.
+ */
+export async function loadCatalogExercises(db: Queryable): Promise<CatalogExercise[]> {
+  const { rows } = await db.query<ExerciseRow>(
+    `select id, slug, name, movement_pattern, muscle_tags, equipment_tags, level,
+            contraindication_tags, instructions, quality_flag
+       from app.exercises`,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    movement_pattern: row.movement_pattern,
+    muscle_tags: row.muscle_tags,
+    equipment_tags: row.equipment_tags,
+    level: row.level,
+    contraindication_tags: row.contraindication_tags,
+    instructions: row.instructions,
+    quality_flag: row.quality_flag,
+  }));
+}
+
+export async function loadExerciseSubstitutions(
+  db: Queryable,
+): Promise<CatalogExerciseSubstitution[]> {
+  const { rows } = await db.query<CatalogExerciseSubstitution>(
+    `select exercise_id, substitute_id from app.exercise_substitutions`,
+  );
+  return rows;
 }

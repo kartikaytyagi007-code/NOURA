@@ -17,6 +17,7 @@ import type { WorkerConfig } from './config.js';
 import { handleDietPlanGenerate } from './handlers/diet-plan-generate.js';
 import { handleMealScanAnalyze } from './handlers/meal-scan-analyze.js';
 import { handleSystemPing } from './handlers/system-ping.js';
+import { handleWorkoutPlanGenerate } from './handlers/workout-plan-generate.js';
 import { relayGenerationRequests, startRelayLoop } from './relay.js';
 
 export interface WorkerRuntime {
@@ -109,6 +110,11 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
     QUEUES.mealScanAnalyze,
     { batchSize: 1, localConcurrency: config.concurrency },
     (jobs) => handleMealScanAnalyze(jobs, jobPool, ai, media, log),
+  );
+  await boss.work<QueuePayloads['workout-plan.generate']>(
+    QUEUES.workoutPlanGenerate,
+    { batchSize: 1, localConcurrency: config.concurrency },
+    (jobs) => handleWorkoutPlanGenerate(jobs, jobPool, config.appEnv, log),
   );
   ready = true;
 

@@ -634,8 +634,112 @@ plan adaptation are in scope.
 - Android/iOS builds, the container image and Google/Apple sign-in remain unverified here, unchanged
   from M1-M5.
 
-### M7 hand-off
+## M7 · Personalized workout plans and workout logging
 
-Workouts (blueprint §11, §16 M7) and Home's "Today's workout" placeholder. Not started.
+**Delivered**
 
-Next-meal options, daily summaries and seven-day patterns (blueprint §9, §10, §16 M6). Not started.
+- **Exercise-catalog test-fixture seed (`supabase/migrations/20261001001200_m7_exercise_test_fixture.sql`,
+  new), mirroring M3/D-025 exactly:** 29 `quality_flag = 'test_fixture'` exercises across squat, hinge,
+  horizontal/vertical push, horizontal/vertical pull, core and carry/conditioning movement patterns,
+  beginner/intermediate/advanced levels, and bodyweight/dumbbell/barbell/bench/pull-up-bar/kettlebell/
+  resistance-band/gym-machine/bike equipment, plus 19 symmetric `exercise_substitutions` relationships.
+  No other migration was needed: M1's `workout_plans`/`workout_plan_sessions`/`workout_plan_exercises`
+  (the generated prescription) and `workout_logs`/`workout_set_logs` (what actually happened) already
+  existed, unused, as exactly the two-layer schema this milestone's session logging needed.
+- **Catalog gate generalized, not duplicated (`packages/domain/src/catalog/gate.ts`):** `catalogGate()`
+  now takes any `{ quality_flag }` item, so the same D-025 fail-closed rule governs both diet-plan and
+  workout-plan generation from one implementation.
+- **Workout-plan generation (`packages/domain/src/workouts/`, new):** `generate.ts`'s
+  `generateWorkoutPlan` is the deterministic, seed-free counterpart to M3's `generatePlan` — one
+  session per selected weekday, exercise count scaled from `duration_minutes` (clamped 3-6),
+  movement-pattern rotation by session index, and level-based set/rep/rest prescriptions
+  (`prescriptionForLevel`, explicitly documented as engineering placeholders, not reviewed exercise
+  science). `eligibility.ts` filters by equipment (a `home`-only location is restricted to declared
+  `equipment_ids`; `gym`/`both` assume full access), recorded limitations
+  (`contraindication_tags` overlap excludes outright), and experience (a ceiling, not a floor).
+  `substitutions.ts`'s `substitutionsFor` offers only catalog-declared `exercise_substitutions`
+  relationships, filtered through the same eligibility rules. `inputs.ts` loads training preferences
+  and flags `hasCompleteTrainingPreferences` honestly.
+- **Queue registration:** `workout-plan.generate` added to `QUEUES`/`QUEUE_POLICIES`/
+  `GENERATION_REQUEST_QUEUES` (`packages/domain/src/jobs/queues.ts`); `request_type` is always
+  `'workout_plan'` (never `'plan_regeneration'`, which `diet_plan` already claims) — see D-029.
+- **Worker (`apps/worker/src/handlers/workout-plan-generate.ts`, new):** idempotent on
+  `generation_request_id`, mirroring `handleDietPlanGenerate` exactly — reloads inputs fresh, applies
+  the catalog gate, supersedes the previous active plan, and records an honest
+  `safe_error_code`/`safe_error_message` (`planning_unavailable`, `catalog_unavailable`,
+  `plan_infeasible`) rather than ever fabricating a plan.
+- **API (`apps/api/src/modules/workouts/`, new):** `POST /v1/workout-plans/generate`
+  (`generateWorkoutPlan`), `GET /v1/workout-plans/current` (`getCurrentWorkoutPlan`),
+  `GET /v1/exercises/{id}/substitutions` (`getExerciseSubstitutions`), `POST /v1/workout-logs`
+  (`createWorkoutLog`), `PUT /v1/workout-logs/{id}/sets` (`putWorkoutSets`) and
+  `PATCH /v1/workout-logs/{id}` (`patchWorkoutLog`) all flip from `x-noura-status: planned` (set since
+  the contract was first drafted) to `implemented`. `createWorkoutLog` dedupes by `client_id` the same
+  way M4's meal logs do; `putWorkoutSets` additionally verifies every logged `exercise_id` belongs to
+  the log's own session before accepting a write. Home's `todays_workout` placeholder is wired to real
+  data (`apps/api/src/modules/recommendations/home-service.ts`), status derived from the latest
+  `workout_logs` row for that session when `completed`/`skipped`.
+- **Contracts:** no schema changes were needed — the M7 operations, request/response schemas
+  (`WorkoutPlan`, `WorkoutSession`, `PrescribedExercise`, `Substitutions`, `WorkoutLog`, etc.) were
+  already fully drafted since the contract's initial authoring; this milestone only flips their
+  `x-noura-status`. TS and Dart clients regenerated (no content change) and contract drift verified.
+- **Flutter (`apps/mobile/lib/features/workouts/`, `core/workouts/`, new):** `WorkoutScreen` (weekly
+  schedule), `WorkoutSessionScreen` (one day's prescribed exercises with a "Replace" action),
+  `ActiveSessionScreen` (set-by-set logging with a real `Timer.periodic` countdown rest timer, not a
+  stub), `ExerciseReplacementScreen` (catalog-approved, currently-eligible substitutes only), and
+  `CompletionSummaryScreen` (completed-vs-skipped per exercise), each with loading/empty/error states
+  per D-023. `ActiveSessionController` is the session's state machine (exercise/set/rest/finished).
+  `MockWorkoutRepository` provides `(mock)`-labelled development data. Home's "Today's workout"
+  placeholder is replaced with real data.
+- **Docs:** decision D-029; this M7 section.
+
+### Acceptance checks (run 2026-10-02 in the development container)
+
+| Check                                                                       | Command                                                                                                                                                                                                             | Result                                                                                                    |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Secret scan                                                                 | `pnpm secrets:check`                                                                                                                                                                                                | Passed (740 files)                                                                                        |
+| Lint and format                                                             | `pnpm lint`                                                                                                                                                                                                         | Passed                                                                                                    |
+| OpenAPI lint                                                                | `pnpm contracts:lint`                                                                                                                                                                                               | Valid. 14 pre-existing example warnings (same as M1-M6)                                                   |
+| Typecheck                                                                   | `pnpm typecheck`                                                                                                                                                                                                    | Passed (6 workspace projects)                                                                             |
+| Contract, domain and ai unit tests                                          | `pnpm -r --filter './packages/*' run test`                                                                                                                                                                          | Passed. contracts 13, domain 170 (19 new), ai 6                                                           |
+| Migrations, RLS, grants                                                     | `supabase`: `vitest run` against PostgreSQL 16                                                                                                                                                                      | Passed. 53 tests (44 from M1-M6, 9 new: catalog honesty + negative ownership)                             |
+| API integration (workouts routes)                                           | `apps/api`: `vitest run`                                                                                                                                                                                            | Passed. 133 tests (118 from M1-M6, 15 new)                                                                |
+| Worker                                                                      | `apps/worker`: `vitest run`                                                                                                                                                                                         | Passed. 37 tests (28 from M1-M6, 9 new; 1 pre-existing test updated to a genuinely unmapped request type) |
+| Flutter format, analyze and tests                                           | `dart format --line-length 120`, `flutter analyze`, `flutter test`                                                                                                                                                  | Passed. No issues; 125 tests (110 from M1-M6, 15 new)                                                     |
+| Contract drift                                                              | `pnpm contracts:check`                                                                                                                                                                                              | Passed (after committing regenerated TS/Dart clients)                                                     |
+| Plan never includes an exercise the equipment/location can't support        | Domain test: home-only, no barbell excludes `barbell-back-squat`; declaring a barbell includes it; `gym`/`both` always include it                                                                                   | Passed                                                                                                    |
+| Plan never includes a contraindicated exercise for a recorded limitation    | Domain + worker tests: overlapping `contraindication_tags` excludes outright; a fully-excluded catalog is infeasible, never silently relaxed                                                                        | Passed                                                                                                    |
+| Schedule respects `days_per_week`/`weekdays`/`duration_minutes`             | Domain test: exactly `days_per_week` sessions land on the selected weekdays; exercise count scales with duration within bounds                                                                                      | Passed                                                                                                    |
+| Substitutions are catalog-only and currently eligible                       | Domain + API tests: only `exercise_substitutions` relationships are offered, filtered to what the user can currently do                                                                                             | Passed                                                                                                    |
+| Workout logging: start/complete/log-exercise, partial/skipped, weights/reps | API tests: `createWorkoutLog`/`putWorkoutSets`/`patchWorkoutLog` persist correctly, including skipped sets and null load                                                                                            | Passed                                                                                                    |
+| Authorization and ownership (new negative-ownership requirement, AGENTS.md) | `supabase` tests: user B cannot read/update/delete/insert-as user A's workout plan, session, exercise, log or set log; API tests: cross-user session/log access 404s                                                | Passed                                                                                                    |
+| Idempotent generation requests                                              | API test: identical `Idempotency-Key` + body replays the same job id and writes nothing twice; DB test: the existing one-active-job partial index covers `workout_plan`                                             | Passed                                                                                                    |
+| Idempotent session-logging mutations                                        | API tests: `createWorkoutLog` dedupes by `client_id`; `putWorkoutSets`/`patchWorkoutLog` 409 on a stale `expected_revision`                                                                                         | Passed                                                                                                    |
+| Infeasibility and catalog-gate honesty                                      | Worker tests: `no_eligible_exercises`, `insufficient_weekdays`, missing training preferences, and a test-fixture-only catalog in a "production" env all record an honest `safe_error_code`, never a fabricated plan | Passed                                                                                                    |
+| Container image                                                             | `docker build .`                                                                                                                                                                                                    | **Not run here.** No Docker daemon, unchanged from M1-M6                                                  |
+| Local Supabase stack                                                        | `supabase start && supabase db reset`                                                                                                                                                                               | **Not run here.** Plain-Postgres shim used (D-012)                                                        |
+
+### Known limitations and release gates
+
+- **No licensed exercise dataset (open, new to this milestone, mirrors M3-M6's catalog gap).**
+  Workout-plan generation and substitutions are computed correctly, but only against the synthetic
+  `test_fixture` exercise catalog (D-029); a licensed, reviewed catalog must replace it before staging/
+  production use.
+- **Set/rep/rest prescriptions and session-sizing are engineering placeholders (provisional, D-029).**
+  `PRESCRIPTION_BY_LEVEL` and the one-exercise-per-~8-minutes session-sizing heuristic have not been
+  reviewed by a qualified trainer; they should be confirmed before this is presented as anything beyond
+  an explainable heuristic.
+- **Exercise replacement is informational only, by design.** There is no API operation to permanently
+  substitute an exercise within an already-generated plan this milestone; `ExerciseReplacementScreen`
+  changes what the user logs for the current session, not the stored plan. A persisted "replace a
+  planned exercise" endpoint is a natural later extension.
+- **No adaptive training, by design.** Every regeneration is a fresh deterministic run from current
+  training preferences, never influenced by prior session logs.
+- **No physique analysis, no wearable integrations, by design.**
+- **No licensed nutrition/recipe catalog, no scheduled purge, no real AI vision provider (carried,
+  unchanged from M3-M6).**
+- Android/iOS builds, the container image and Google/Apple sign-in remain unverified here, unchanged
+  from M1-M6.
+
+### M8 hand-off
+
+Not scoped by this milestone; see the M8 ticket in a future update to this file.

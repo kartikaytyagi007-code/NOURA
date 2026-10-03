@@ -445,3 +445,122 @@ describe('private storage', () => {
     expect(rowCount).toBe(0);
   });
 });
+
+// M7: app.workout_plans/workout_plan_sessions/workout_plan_exercises/workout_logs/workout_set_logs
+// exist since M1 but become actively used for the first time this milestone (AGENTS.md requires a
+// negative ownership test for each table that becomes actively used).
+describe('M7 workout plan/session/log owner isolation (user A vs user B)', () => {
+  let userA: string;
+  let userB: string;
+  let planB: string;
+  let sessionB: string;
+  let exerciseRowB: string;
+  let logB: string;
+  let exerciseCatalogId: string;
+
+  beforeAll(async () => {
+    userA = await createAuthUser();
+    userB = await createAuthUser();
+    planB = randomUUID();
+    sessionB = randomUUID();
+    exerciseRowB = randomUUID();
+    logB = randomUUID();
+    const catalog = await adminPool.query<{ id: string }>('select id from app.exercises limit 1');
+    exerciseCatalogId = catalog.rows[0]!.id;
+    await asOwner(async (c) => {
+      await c.query(
+        `insert into app.workout_plans (id, user_id, version, profile_revision, starts_on, status)
+         values ($1, $2, 1, 1, current_date, 'active')`,
+        [planB, userB],
+      );
+      await c.query(
+        `insert into app.workout_plan_sessions (id, user_id, plan_id, session_date, session_order, title)
+         values ($1, $2, $3, current_date, 1, 'Full-body session')`,
+        [sessionB, userB, planB],
+      );
+      await c.query(
+        `insert into app.workout_plan_exercises
+           (id, user_id, session_id, exercise_id, ordinal, sets, reps_min, reps_max, rest_sec)
+         values ($1, $2, $3, $4, 1, 3, 8, 12, 60)`,
+        [exerciseRowB, userB, sessionB, exerciseCatalogId],
+      );
+      await c.query(
+        `insert into app.workout_logs (id, user_id, client_id, session_id, status)
+         values ($1, $2, gen_random_uuid(), $3, 'in_progress')`,
+        [logB, userB, sessionB],
+      );
+      await c.query(
+        `insert into app.workout_set_logs (user_id, workout_log_id, exercise_id, set_ordinal, reps, skipped)
+         values ($1, $2, $3, 1, 10, false)`,
+        [userB, logB, exerciseCatalogId],
+      );
+    });
+  });
+
+  it('cannot read user B workout plans, sessions, exercises, logs or set logs', async () => {
+    const result = await asRole('noura_api', userA, async (c) => {
+      const plans = await c.query('select 1 from app.workout_plans where id = $1', [planB]);
+      const sessions = await c.query('select 1 from app.workout_plan_sessions where id = $1', [
+        sessionB,
+      ]);
+      const exercises = await c.query('select 1 from app.workout_plan_exercises where id = $1', [
+        exerciseRowB,
+      ]);
+      const logs = await c.query('select 1 from app.workout_logs where id = $1', [logB]);
+      const sets = await c.query('select 1 from app.workout_set_logs where workout_log_id = $1', [
+        logB,
+      ]);
+      return {
+        plans: plans.rowCount,
+        sessions: sessions.rowCount,
+        exercises: exercises.rowCount,
+        logs: logs.rowCount,
+        sets: sets.rowCount,
+      };
+    });
+    expect(result).toEqual({ plans: 0, sessions: 0, exercises: 0, logs: 0, sets: 0 });
+  });
+
+  it('cannot update or delete user B workout rows', async () => {
+    const result = await asRole('noura_api', userA, async (c) => {
+      const plans = await c.query(
+        "update app.workout_plans set status = 'cancelled' where id = $1",
+        [planB],
+      );
+      const logs = await c.query('delete from app.workout_logs where id = $1', [logB]);
+      return { plans: plans.rowCount, logs: logs.rowCount };
+    });
+    expect(result).toEqual({ plans: 0, logs: 0 });
+    const stillThere = await adminPool.query('select id from app.workout_plans where id = $1', [
+      planB,
+    ]);
+    expect(stillThere.rowCount).toBe(1);
+  });
+
+  it('cannot insert a workout plan or log owned by user B (client-supplied user_id is rejected)', async () => {
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query(
+          `insert into app.workout_plans (user_id, version, profile_revision, starts_on, status)
+           values ($1, 99, 1, current_date, 'draft')`,
+          [userB],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query(
+          `insert into app.workout_logs (user_id, client_id, session_id) values ($1, gen_random_uuid(), $2)`,
+          [userB, sessionB],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('applies the same isolation to the worker role', async () => {
+    const { rowCount } = await asRole('noura_worker', userA, (c) =>
+      c.query('select 1 from app.workout_plans where id = $1', [planB]),
+    );
+    expect(rowCount).toBe(0);
+  });
+});

@@ -29,6 +29,12 @@ interface PendingRequestRow {
   id: string;
 }
 
+interface WorkoutSessionRow {
+  id: string;
+  title: string;
+  status: Schemas['WorkoutSessionPreview']['status'];
+}
+
 const SLOT_ORDER: readonly Schemas['MealSlot'][] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 /**
@@ -91,6 +97,24 @@ export async function getHome(
       }
     : null;
 
+  const { rows: workoutRows } = await client.query<WorkoutSessionRow>(
+    `select wps.id, wps.title,
+            case when wl.status in ('completed', 'skipped') then wl.status else wps.status end as status
+       from app.workout_plan_sessions wps
+       join app.workout_plans wp on wp.id = wps.plan_id
+       left join lateral (
+         select status from app.workout_logs
+           where user_id = $1 and session_id = wps.id
+           order by created_at desc limit 1
+       ) wl on true
+       where wps.user_id = $1 and wp.status = 'active' and wps.session_date = $2
+       order by wps.session_order limit 1`,
+    [userId, date],
+  );
+  const todaysWorkout: Schemas['Home']['todays_workout'] = workoutRows[0]
+    ? { session_id: workoutRows[0].id, title: workoutRows[0].title, status: workoutRows[0].status }
+    : null;
+
   const pending =
     profile?.onboarding_status === 'completed'
       ? (
@@ -109,7 +133,7 @@ export async function getHome(
     date,
     nutrition,
     next_meal: nextMeal,
-    todays_workout: null, // M7 (workouts) is not implemented yet.
+    todays_workout: todaysWorkout,
     insight: null, // A single-line Home insight is deferred to the dedicated /v1/insights screen.
     plan_generation: planGeneration,
   };

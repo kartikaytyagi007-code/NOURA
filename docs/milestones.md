@@ -868,4 +868,130 @@ How the M8 acceptance gate maps to tests:
 
 ### M9 hand-off
 
+See `## M9 AI Coach` below.
+
+## M9 AI Coach
+
+**Ticket.** Context-aware coach chat grounded in the user's own profile/goals, active diet plan,
+logged meals and workout schedule; honest disclosure when that context is missing; a server-side AI
+provider adapter extending the M4 mock-first pattern (D-010), with input and output validation;
+out-of-scope/medical-safety handling (no diagnosis, no medication dosing) enforced both in the prompt
+and via output validation; persisted chat history with strict per-user ownership; grounded response
+cards; a single confirmable proposed action (meal swap) that never applies itself; and tests for
+authorization, context-assembly honesty, prompt/response validation, provider-failure handling, chat
+history persistence, and out-of-scope/medical-safety handling (see D-031).
+
+### Delivered
+
+- **No new domain tables; one additive column.** `app.coach_threads`/`app.coach_messages`/
+  `app.action_proposals` (`supabase/migrations/20261001000600_insights_coach.sql`) already existed
+  from M1, RLS-enabled and granted, unused. This milestone adds
+  `supabase/migrations/20261001001300_m9_coach_message_cards.sql` (`app.coach_messages.cards jsonb`,
+  additive, default `'[]'`) so a completed reply's structured cards persist with the message.
+- **Domain (`packages/domain/src/coach/`, new):** `context.ts`'s `loadCoachContext` (today's active
+  diet-plan slot plus a real eligible alternate, today's logged-meal count, today's workout session,
+  reusing M3/M6's `loadDietPlanningInputs`/`loadCatalogRecipes`/`filterEligibleRecipes`, never a
+  parallel read path) and `safety.ts`'s `checkSafety`/`safeDeclineMessage`/`COACH_SYSTEM_PROMPT` — the
+  out-of-scope/medical-safety screen and its paired clinician-redirecting decline text.
+- **AI provider (`packages/ai/`):** `MockAiProvider.coachReply` now answers deterministically and
+  honestly from the context it is given (explicitly states "no active diet/workout plan" when there
+  is none, cites the real logged-meal count and today's session when there is), and only ever proposes
+  `swap_meal`, only when the user asked for a swap and a real alternate exists.
+  `validators/coach.ts` adds strict Zod schemas for both directions of the provider boundary —
+  `validateCoachContextInput` (what the worker sends) and `validateCoachProviderOutput` (what comes
+  back: `answer_text`, `evidence_refs`, at most one `proposed_action` of type `swap_meal` only) —
+  rejecting anything malformed or carrying unexpected fields.
+- **API (`apps/api/src/modules/coach/`, new):** `createCoachThread`, `deleteCoachThread` (new
+  operation, cascades to messages/proposals), `listCoachMessages` (cursor-paginated, oldest first),
+  `sendCoachMessage` (202-accepted, idempotent on `client_id` even across different
+  `Idempotency-Key`s, enforces a 5/day quota via `usage_reservations`), `applyActionProposal` (calls
+  the exact same `replacePlanMeal` the existing swap UI uses, apply-once, 409 on a stale revision, 422
+  on an expired/already-resolved/unsupported-type proposal) and `cancelActionProposal`. Every query is
+  scoped by `user_id` from the verified token; missing and non-owned resources both 404.
+- **Worker (`apps/worker/src/handlers/coach-reply.ts`, new; `coach.reply` queue added to
+  `packages/domain/src/jobs/queues.ts`):** idempotent on the generation-request id (identical
+  crash-recovery shape to `meal-scan-analyze.ts`); runs `checkSafety` on the user's message **before**
+  calling the provider at all (an out-of-scope request never reaches it); loads `CoachContext`;
+  validates the context payload and the provider's output; runs `checkSafety` again on the returned
+  text as defence in depth; builds response cards directly from the real context (never from AI free
+  text); re-validates any proposed swap against a freshly loaded context before creating an
+  `action_proposals` row (a stale/invented id is silently dropped, never trusted); and handles a
+  provider failure or malformed response as a clear failed message, never a crash or a silent swallow.
+- **Contracts:** `createCoachThread`, `listCoachMessages`, `sendCoachMessage`, `applyActionProposal`,
+  `cancelActionProposal` flipped to `x-noura-status: implemented`; new `deleteCoachThread` operation
+  (`DELETE /v1/coach/threads/{id}`) added. TS and Dart clients regenerated and committed.
+- **Flutter (`apps/mobile/lib/core/coach/`, `apps/mobile/lib/features/coach/`):** `CoachScreen`
+  replaces the M1-M8 placeholder with a real chat UI — message bubbles, a pending spinner, suggested
+  prompt chips, per-message cards and a proposal card with explicit Confirm/Cancel actions.
+  `CoachController` polls for the real async reply the same way `MealScanController` polls for a scan
+  result. `TabPage` gained a `scrollable: false` mode for this screen's full-height flex layout.
+  `MockCoachRepository` provides `(mock)`-labelled development replies. No Stitch screens exist for
+  this feature (same precedent as M6-M8), so `lib/core/ui` is used throughout.
+- **Database:** new negative-ownership test block in `supabase/tests/security.test.ts` ("M9 coach
+  thread/message/action-proposal owner isolation") covering all three tables.
+- **Docs:** decision D-031; this M9 section.
+
+### Acceptance checks (run 2026-10-03 in the development container)
+
+| Check                                              | Command                                                            | Result                                                   |
+| -------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------- |
+| Secret scan                                        | `pnpm secrets:check`                                               | Passed (774 files)                                       |
+| Lint and format                                    | `pnpm lint`                                                        | Passed                                                   |
+| OpenAPI lint                                       | `pnpm contracts:lint`                                              | Valid. 14 pre-existing example warnings (same as M1-M8)  |
+| Typecheck                                          | `pnpm typecheck`                                                   | Passed (6 workspace projects)                            |
+| Contract, domain and ai unit tests                 | `pnpm -r --filter './packages/*' run test`                         | Passed. contracts 13, domain 191 (7 new), ai 19 (13 new) |
+| Migrations, RLS, grants, M9 owner-isolation        | `supabase`: `vitest run` against PostgreSQL 16                     | Passed. 63 tests (58 from M1-M8, 5 new)                  |
+| API integration (coach threads/messages/proposals) | `apps/api`: `vitest run`                                           | Passed. 162 tests (146 from M1-M8, 16 new)               |
+| Worker (coach.reply handler + relay)               | `apps/worker`: `vitest run`                                        | Passed. 47 tests (37 from M1-M8, 10 new)                 |
+| Flutter format, analyze and tests                  | `dart format --line-length 120`, `flutter analyze`, `flutter test` | Passed. No issues; 139 tests (136 from M1-M8, 3 new)     |
+| Contract drift                                     | `pnpm contracts:check`                                             | Passed (after committing regenerated TS/Dart clients)    |
+
+How the M9 acceptance gate maps to tests:
+
+- **Authorization/ownership:** `coach.test.ts` covers 401-without-token on every coach/proposal route
+  and cross-user 404s on thread messages/send/delete and on apply/cancel; `security.test.ts` proves
+  RLS denies cross-user read/update/delete/insert-as-another-user on all three tables, plus a message
+  that tries to attach to another user's thread, at the database level, bypassing the API entirely.
+- **Context assembly, including honest gap-handling:** `coach-reply.test.ts` asserts the reply states
+  "don't have an active diet plan"/"don't have an active workout plan" honestly when neither exists,
+  and is grounded in real data (today's logged-meal count, today's workout session title) when they do.
+- **Prompt/response validation:** `coach.test.ts` (ai package) proves malformed/adversarial provider
+  output (missing fields, extra fields, an unsupported `proposed_action.type`) is rejected, never
+  trusted; `coach-reply.test.ts` proves the same end-to-end (`failed_invalid_response`, never a crash).
+- **Provider failure handling:** `coach-reply.test.ts`'s `FailingProvider` case asserts a thrown
+  provider error becomes a clear `failed`/`provider_unavailable` message and generation-request state,
+  never a crash or a silently swallowed job.
+- **Chat history persistence/retrieval:** `coach.test.ts` covers create/list/send/delete end to end,
+  including idempotent re-submission by `client_id` and cascade-delete of messages/proposals.
+- **Out-of-scope/medical-safety handling:** `safety.test.ts` (domain) unit-tests the four screened
+  categories directly; `coach-reply.test.ts` proves a diagnosis request and a medication-dosing request
+  are declined **before** the provider is ever called, and that an unsafe provider output (a simulated
+  model stating a diagnosis) is overridden by the post-check rather than reaching the user.
+- **No silent actions / apply-once:** `coach.test.ts` proves applying a proposal performs the exact
+  same `recipe_id`/`revision` change the swap UI's own tests expect, a second apply attempt 422s, an
+  expired proposal 422s, and a stale `expected_revision` 409s; `coach-reply.test.ts` proves a proposal
+  is only ever created when the AI's referenced ids match a freshly reloaded context.
+
+### Known limitations and release gates
+
+- **`checkSafety` is a keyword/pattern screen, not a reviewed clinical-safety policy.** It covers the
+  ticket's named examples (diagnosis, medication dosing) plus two related blueprint categories
+  (eating-disorder-risk phrasing, body-fat/physique analysis), deliberately biased toward
+  over-flagging; a licensed safety/moderation review is required before production (D-031).
+- **Only `swap_meal` is ever proposed or applied, by design.** `regenerate_day`/`reschedule_workout`
+  remain valid `ActionProposal.type` values for forward compatibility but have no domain mutation
+  logic behind them in this milestone — see D-031 for why.
+- **No scheduled 90-day coach-history purge job.** The blueprint specifies 90-day retention; this
+  milestone adds user-initiated deletion (`DELETE /v1/coach/threads/{id}`) but not an automatic
+  cleanup cron, the same category of gap as M1-M8's other deferred purge jobs.
+- **`COACH_REPLY_DAILY_QUOTA = 5` is a provisional engineering number** (blueprint §13's own proposed
+  figure), not a reviewed product limit, same caveat as M4's `MEAL_SCAN_DAILY_QUOTA`.
+- **No real AI provider.** `AI_PROVIDER=mock` remains the only exercised path in this environment; the
+  factory fails closed for any other provider outside development/test, unchanged from M4.
+- Android/iOS builds, the container image and Google/Apple sign-in remain unverified here, unchanged
+  from M1-M8. No Docker daemon is available in this container; the plain-Postgres shim (D-012) was used
+  for all database tests, as in every prior milestone.
+
+### M10 hand-off
+
 Not scoped by this milestone.

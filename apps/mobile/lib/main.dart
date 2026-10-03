@@ -7,6 +7,7 @@ import 'core/api/api_client.dart';
 import 'core/auth/auth_repository.dart';
 import 'core/auth/mock_auth_repository.dart';
 import 'core/auth/supabase_auth_repository.dart';
+import 'core/coach/coach_repository.dart';
 import 'core/config/app_config.dart';
 import 'core/diet/diet_repository.dart';
 import 'core/meals/meal_scan_repository.dart';
@@ -32,6 +33,7 @@ Future<void> main() async {
   final RecommendationsRepository recommendations;
   final WorkoutRepository workouts;
   final ProgressRepository progress;
+  final CoachRepository coach;
   if (config.useMocks) {
     // Explicit development mocks: no network, no real accounts. validate() refuses this outside
     // development debug builds, and the app shows a persistent banner while it is active.
@@ -42,6 +44,7 @@ Future<void> main() async {
     recommendations = MockRecommendationsRepository();
     workouts = MockWorkoutRepository();
     progress = MockProgressRepository();
+    coach = MockCoachRepository();
   } else {
     await Supabase.initialize(
       url: config.supabaseUrl,
@@ -56,6 +59,7 @@ Future<void> main() async {
     recommendations = ApiRecommendationsRepository(apiClient);
     workouts = ApiWorkoutRepository(apiClient);
     progress = ApiProgressRepository(apiClient);
+    coach = ApiCoachRepository(apiClient);
   }
 
   runApp(
@@ -69,6 +73,7 @@ Future<void> main() async {
         recommendationsRepositoryProvider.overrideWithValue(recommendations),
         workoutRepositoryProvider.overrideWithValue(workouts),
         progressRepositoryProvider.overrideWithValue(progress),
+        coachRepositoryProvider.overrideWithValue(coach),
       ],
       child: const NouraApp(),
     ),

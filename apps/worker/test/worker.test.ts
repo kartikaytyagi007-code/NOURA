@@ -197,7 +197,9 @@ describe('generation request relay (transactional outbox)', () => {
   });
 
   it('leaves request types without a queue untouched', async () => {
-    const { requestId } = await newRequest('coach_reply');
+    // weekly_insight generation is not implemented by any milestone yet (blueprint §16 only requires
+    // the seven-day pattern view, computed deterministically in M6; this row type remains unmapped).
+    const { requestId } = await newRequest('weekly_insight');
     const result = await relayGenerationRequests(relayPool, runtime.boss, log);
     expect(result.skipped).toBeGreaterThanOrEqual(1);
     expect(await queued(requestId)).toEqual({

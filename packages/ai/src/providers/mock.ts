@@ -210,12 +210,87 @@ export class MockAiProvider implements AiProvider {
     return this.result({ text: 'Development mock provider: no explanation generated.' });
   }
 
-  coachReply(): Promise<AiResult<unknown>> {
+  /**
+   * Development mock for coach chat (docs/decisions.md D-031). Deterministic over the validated
+   * `context` input (see `../validators/coach.ts`): it never invents a nutrition/exercise number,
+   * explicitly says so whenever `context.diet`/`context.workout` reports no active plan or no
+   * logged data, and only ever proposes `swap_meal`, and only when the context actually has a
+   * today's planned slot to swap. The out-of-scope/medical-safety path never reaches this far — the
+   * worker's `checkSafety` pre-check handles it before calling the provider at all — so this mock
+   * focuses purely on honest context-grounded framing, exactly like `rankDietCandidates` and
+   * `explainWeeklyInsights` focus on their own narrow jobs.
+   */
+  coachReply(context: Record<string, unknown> = {}): Promise<AiResult<unknown>> {
+    const diet = (context['diet'] ?? {}) as {
+      has_active_plan?: boolean;
+      today_logged_meal_count?: number;
+      today?: {
+        slot?: string;
+        recipe_name?: string;
+        plan_meal_id?: string;
+        alternate_candidate_id?: string | null;
+        alternate_candidate_name?: string | null;
+      } | null;
+    };
+    const workout = (context['workout'] ?? {}) as {
+      has_active_plan?: boolean;
+      today_session_title?: string | null;
+      today_session_status?: string | null;
+    };
+    const message = typeof context['user_message'] === 'string' ? context['user_message'] : '';
+    const wantsSwap = /\bswap\b/i.test(message);
+
+    const lines: string[] = [];
+    const evidenceRefs: string[] = [];
+
+    if (!diet.has_active_plan) {
+      lines.push(
+        "You don't have an active diet plan right now, so I can't look at today's meals yet.",
+      );
+    } else {
+      lines.push(
+        `You've logged ${diet.today_logged_meal_count ?? 0} meal(s) today against your active plan.`,
+      );
+      evidenceRefs.push('diet.today');
+      if (diet.today?.recipe_name) {
+        lines.push(`Your ${diet.today.slot} is planned as ${diet.today.recipe_name}.`);
+      }
+    }
+
+    if (!workout.has_active_plan) {
+      lines.push("You also don't have an active workout plan yet.");
+    } else if (workout.today_session_title) {
+      lines.push(
+        `Today's workout is "${workout.today_session_title}" (${workout.today_session_status ?? 'scheduled'}).`,
+      );
+      evidenceRefs.push('workout.today');
+    } else {
+      lines.push('Today looks like a rest day on your workout schedule.');
+    }
+
+    lines.push('Development mock provider: this is a scripted reply, not a live model response.');
+
+    const today = diet.today;
+    const canProposeSwap =
+      wantsSwap && diet.has_active_plan && !!today?.plan_meal_id && !!today?.alternate_candidate_id;
+
+    if (canProposeSwap && today?.alternate_candidate_name) {
+      lines.push(
+        `I can swap it for ${today.alternate_candidate_name} if you'd like — just confirm.`,
+      );
+    }
+
     return this.result({
-      answer_text: 'Development mock provider: the coach is not available in this build.',
-      evidence_refs: [],
-      cards: [],
-      action_proposal: null,
+      answer_text: lines.join(' '),
+      evidence_refs: evidenceRefs,
+      proposed_action: canProposeSwap
+        ? {
+            type: 'swap_meal' as const,
+            plan_meal_id: String(today!.plan_meal_id),
+            candidate_recipe_id: String(today!.alternate_candidate_id),
+            reason: 'You asked for a swap, and an alternative is available for that slot.',
+          }
+        : null,
     });
   }
 }

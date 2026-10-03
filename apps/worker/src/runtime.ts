@@ -14,6 +14,7 @@ import pg from 'pg';
 import { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { WorkerConfig } from './config.js';
+import { handleCoachReply } from './handlers/coach-reply.js';
 import { handleDietPlanGenerate } from './handlers/diet-plan-generate.js';
 import { handleMealScanAnalyze } from './handlers/meal-scan-analyze.js';
 import { handleSystemPing } from './handlers/system-ping.js';
@@ -115,6 +116,11 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
     QUEUES.workoutPlanGenerate,
     { batchSize: 1, localConcurrency: config.concurrency },
     (jobs) => handleWorkoutPlanGenerate(jobs, jobPool, config.appEnv, log),
+  );
+  await boss.work<QueuePayloads['coach.reply']>(
+    QUEUES.coachReply,
+    { batchSize: 1, localConcurrency: config.concurrency },
+    (jobs) => handleCoachReply(jobs, jobPool, ai, log),
   );
   ready = true;
 

@@ -17,7 +17,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@noura/domain": "workspace:*"
+    "@noura/domain": "workspace:*",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "vitest": "5.0.3"

@@ -652,6 +652,117 @@ describe('M8 weight-log/progress-photo owner isolation (user A vs user B)', () =
   });
 });
 
+describe('M9 coach thread/message/action-proposal owner isolation (user A vs user B)', () => {
+  let userA: string;
+  let userB: string;
+  let threadB: string;
+  let messageB: string;
+  let proposalB: string;
+
+  beforeAll(async () => {
+    userA = await createAuthUser();
+    userB = await createAuthUser();
+    threadB = randomUUID();
+    messageB = randomUUID();
+    proposalB = randomUUID();
+    await asOwner(async (c) => {
+      await c.query('insert into app.coach_threads (id, user_id) values ($1, $2)', [
+        threadB,
+        userB,
+      ]);
+      await c.query(
+        `insert into app.coach_messages (id, user_id, thread_id, role, content, status)
+         values ($1, $2, $3, 'user', 'hello', 'completed')`,
+        [messageB, userB, threadB],
+      );
+      await c.query(
+        `insert into app.action_proposals
+           (id, user_id, thread_id, message_id, proposal_type, payload, expected_plan_revision, expires_at)
+         values ($1, $2, $3, $4, 'swap_meal', '{}'::jsonb, 1, now() + interval '15 minutes')`,
+        [proposalB, userB, threadB, messageB],
+      );
+    });
+  });
+
+  it('cannot read user B coach threads, messages or action proposals even filtering explicitly', async () => {
+    const result = await asRole('noura_api', userA, async (c) => {
+      const threads = await c.query('select 1 from app.coach_threads where id = $1', [threadB]);
+      const messages = await c.query('select 1 from app.coach_messages where id = $1', [messageB]);
+      const proposals = await c.query('select 1 from app.action_proposals where id = $1', [
+        proposalB,
+      ]);
+      return {
+        threads: threads.rowCount,
+        messages: messages.rowCount,
+        proposals: proposals.rowCount,
+      };
+    });
+    expect(result).toEqual({ threads: 0, messages: 0, proposals: 0 });
+  });
+
+  it('cannot update or delete user B coach rows', async () => {
+    const result = await asRole('noura_api', userA, async (c) => {
+      const threads = await c.query('delete from app.coach_threads where id = $1', [threadB]);
+      const messages = await c.query('delete from app.coach_messages where id = $1', [messageB]);
+      const proposals = await c.query('delete from app.action_proposals where id = $1', [
+        proposalB,
+      ]);
+      return {
+        threads: threads.rowCount,
+        messages: messages.rowCount,
+        proposals: proposals.rowCount,
+      };
+    });
+    expect(result).toEqual({ threads: 0, messages: 0, proposals: 0 });
+    const stillThere = await adminPool.query('select id from app.coach_threads where id = $1', [
+      threadB,
+    ]);
+    expect(stillThere.rowCount).toBe(1);
+  });
+
+  it('cannot insert a coach thread/message owned by user B (client-supplied user_id is rejected)', async () => {
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query('insert into app.coach_threads (user_id) values ($1)', [userB]),
+      ),
+    ).rejects.toThrow(/row-level security/);
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query(
+          `insert into app.coach_messages (user_id, thread_id, role, content, status)
+           values ($1, $2, 'user', 'hi', 'completed')`,
+          [userB, threadB],
+        ),
+      ),
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('cannot attach a message to another user’s thread even as its own owner', async () => {
+    await asOwner(async (c) => {
+      await c.query('insert into app.coach_threads (id, user_id) values ($1, $2)', [
+        randomUUID(),
+        userA,
+      ]);
+    });
+    await expect(
+      asRole('noura_api', userA, (c) =>
+        c.query(
+          `insert into app.coach_messages (user_id, thread_id, role, content, status)
+           values ($1, $2, 'user', 'hi', 'completed')`,
+          [userA, threadB],
+        ),
+      ),
+    ).rejects.toThrow(/coach_messages_thread_owner|row-level security/);
+  });
+
+  it('applies the same isolation to the worker role', async () => {
+    const { rowCount } = await asRole('noura_worker', userA, (c) =>
+      c.query('select 1 from app.coach_messages where id = $1', [messageB]),
+    );
+    expect(rowCount).toBe(0);
+  });
+});
+
 describe('M8 progress-photo retention (D-030: no auto-expiry, unlike meal images)', () => {
   it('a progress-photo media asset gets no expires_at, while a meal-image asset does', async () => {
     const userId = await createAuthUser();

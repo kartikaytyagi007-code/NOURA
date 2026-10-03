@@ -38,10 +38,15 @@ class AppShell extends StatelessWidget {
 
 /// Common page scaffold for a tab: title, settings entry point and a scrolling body.
 class TabPage extends StatelessWidget {
-  const TabPage({super.key, required this.title, required this.children});
+  const TabPage({super.key, required this.title, required this.children, this.scrollable = true});
 
   final String title;
   final List<Widget> children;
+
+  /// False for a full-height flex layout (e.g. a chat screen with a pinned input bar) instead of the
+  /// default scrolling list of sections. [children] is then laid out as a [Column] and may use
+  /// [Expanded]/[Flexible] directly.
+  final bool scrollable;
 
   @override
   Widget build(BuildContext context) {
@@ -56,12 +61,14 @@ class TabPage extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(NSpace.pageMargin),
-        itemCount: children.length,
-        separatorBuilder: (_, _) => const SizedBox(height: NSpace.sm),
-        itemBuilder: (_, i) => children[i],
-      ),
+      body: scrollable
+          ? ListView.separated(
+              padding: const EdgeInsets.all(NSpace.pageMargin),
+              itemCount: children.length,
+              separatorBuilder: (_, _) => const SizedBox(height: NSpace.sm),
+              itemBuilder: (_, i) => children[i],
+            )
+          : Column(children: children),
     );
   }
 }

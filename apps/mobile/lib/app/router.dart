@@ -4,11 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../core/profile/session_profile.dart';
 import '../core/providers.dart';
-import '../features/auth/presentation/forgot_password_screen.dart';
-import '../features/auth/presentation/sign_in_screen.dart';
-import '../features/auth/presentation/sign_up_screen.dart';
-import '../features/auth/presentation/update_password_screen.dart';
-import '../features/auth/presentation/verify_email_screen.dart';
+import '../features/auth/presentation/phone_sign_in_screen.dart';
+import '../features/auth/presentation/verify_otp_screen.dart';
 import '../features/auth/presentation/welcome_screen.dart';
 import '../features/coach/coach_screen.dart';
 import '../features/diet/diet_plan_screen.dart';
@@ -62,14 +59,13 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: Routes.splash, builder: (_, _) => const SplashScreen()),
       GoRoute(path: Routes.welcome, builder: (_, _) => const WelcomeScreen()),
-      GoRoute(path: Routes.signIn, builder: (_, _) => const SignInScreen()),
-      GoRoute(path: Routes.signUp, builder: (_, _) => const SignUpScreen()),
+      GoRoute(path: Routes.signIn, builder: (_, _) => const PhoneSignInScreen()),
       GoRoute(
-        path: Routes.verifyEmail,
-        builder: (_, state) => VerifyEmailScreen(email: state.uri.queryParameters['email'] ?? ''),
+        path: Routes.verifyOtp,
+        // Without a number there is nothing to verify; send the user back to enter one.
+        redirect: (_, state) => (state.uri.queryParameters['phone'] ?? '').isEmpty ? Routes.signIn : null,
+        builder: (_, state) => VerifyOtpScreen(phone: state.uri.queryParameters['phone']!),
       ),
-      GoRoute(path: Routes.forgotPassword, builder: (_, _) => const ForgotPasswordScreen()),
-      GoRoute(path: Routes.updatePassword, builder: (_, _) => const UpdatePasswordScreen()),
       GoRoute(path: Routes.onboarding, builder: (_, _) => const OnboardingScreen()),
       GoRoute(path: Routes.sessionError, builder: (_, _) => const SessionErrorScreen()),
       GoRoute(

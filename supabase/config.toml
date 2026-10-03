@@ -161,7 +161,7 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["noura://auth-callback", "http://127.0.0.1:3000"]
+additional_redirect_urls = ["http://127.0.0.1:3000"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -220,8 +220,9 @@ web3 = 30
 # secret = ""
 
 [auth.email]
+# NOURA: sign-in is phone + SMS one-time code only (docs/decisions.md D-033). No email accounts.
 # Allow/disallow new user signups via email to your project.
-enable_signup = true
+enable_signup = false
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
@@ -258,20 +259,24 @@ otp_expiry = 3600
 # content_path = "./supabase/templates/password_changed_notification.html"
 
 [auth.sms]
+# NOURA: the only sign-in method (D-033). First successful code verification creates the account.
 # Allow/disallow new user signups via SMS to your project.
-enable_signup = false
+enable_signup = true
 # If enabled, users need to confirm their phone number before signing in.
-enable_confirmations = false
-# Template for sending OTP to users
-template = "Your code is {{ .Code }}"
+enable_confirmations = true
+# Template for sending OTP to users. In India the text must match a DLT-registered template.
+template = "Your NOURA sign-in code is {{ .Code }}. Do not share it with anyone."
 # Controls the minimum amount of time that must pass before sending another sms otp.
 max_frequency = "5s"
 
-# Use pre-defined map of phone number to OTP for testing.
-# [auth.sms.test_otp]
-# 4152127777 = "123456"
+# Use pre-defined map of phone number to OTP for testing. Local only: never configure test numbers
+# on a hosted project. Use a number nobody owns.
+[auth.sms.test_otp]
+919000000001 = "123456"
 
-# Configure logged in session timeouts.
+# Configure logged in session timeouts. NOURA keeps a session until the user signs out or the
+# refresh token stops working; after that the app asks for a new SMS code (D-033). A hard limit
+# (timebox/inactivity) needs a paid Supabase plan and is a release decision, not set here.
 # [auth.sessions]
 # Force log out after the specified duration.
 # timebox = "24h"
@@ -323,7 +328,7 @@ max_frequency = "5s"
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
 [auth.external.apple]
-# Requires an Apple Developer account: Services ID + key. See docs/auth-providers.md.
+# Not used: NOURA sign-in is phone + SMS code only (D-033).
 enabled = false
 client_id = "env(SUPABASE_AUTH_EXTERNAL_APPLE_CLIENT_ID)"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
@@ -339,7 +344,7 @@ skip_nonce_check = false
 email_optional = false
 
 [auth.external.google]
-# Requires a Google Cloud OAuth client. See docs/auth-providers.md.
+# Not used: NOURA sign-in is phone + SMS code only (D-033).
 enabled = false
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"

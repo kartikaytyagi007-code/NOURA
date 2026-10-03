@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:noura/app/app.dart';
 import 'package:noura/core/api/api_failure.dart';
 import 'package:noura/core/auth/auth_state.dart';
+import 'package:noura/core/auth/mock_auth_repository.dart';
 import 'package:noura/core/config/app_config.dart';
 import 'package:noura/core/profile/session_profile.dart';
+import 'package:noura/features/auth/presentation/verify_otp_screen.dart';
 
 import '../support/harness.dart';
 
@@ -12,12 +14,13 @@ void main() {
   testWidgets('signed-out cold start shows the welcome screen', (tester) async {
     await pumpNoura(tester, auth: RecordingAuthRepository(), profiles: FakeProfileRepository());
     expect(find.text('NOURA'), findsOneWidget);
-    expect(find.text('Create account'), findsOneWidget);
-    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Continue with phone number'), findsOneWidget);
+    expect(find.textContaining('assword'), findsNothing, reason: 'no password anywhere (D-033)');
+    expect(find.textContaining('mail'), findsNothing, reason: 'no email sign-in (D-033)');
     expect(find.byType(NavigationBar), findsNothing);
   });
 
-  testWidgets('email sign-in with an unfinished profile lands on onboarding', (tester) async {
+  testWidgets('phone + OTP sign-in with an unfinished profile lands on onboarding', (tester) async {
     final auth = RecordingAuthRepository();
     await pumpNoura(
       tester,
@@ -25,20 +28,62 @@ void main() {
       profiles: FakeProfileRepository(onboarding: OnboardingState.notStarted),
     );
 
-    await tester.tap(find.text('Sign in'));
+    await tester.tap(find.text('Continue with phone number'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Send code'));
     await tester.pumpAndSettle();
-    expect(find.text('Enter your email.'), findsOneWidget, reason: 'client-side validation runs first');
+    expect(find.text('Enter your mobile number.'), findsOneWidget, reason: 'client-side validation runs first');
 
-    await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'asha@example.com');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Password'), 'secret123');
-    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await tester.enterText(find.widgetWithText(TextFormField, 'Mobile number'), '12345');
+    await tester.tap(find.widgetWithText(FilledButton, 'Send code'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a valid mobile number.'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Mobile number'), '98765 43210');
+    await tester.tap(find.widgetWithText(FilledButton, 'Send code'));
+    await settle(tester);
+    expect(auth.calls, contains('sendOtp:+919876543210'), reason: 'a bare Indian number gets +91');
+    expect(find.text('Enter the code'), findsOneWidget);
+    expect(find.textContaining('+919876543210'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextFormField, '6-digit code'), '000000');
+    await tester.tap(find.widgetWithText(FilledButton, 'Verify and continue'));
+    await settle(tester);
+    expect(find.textContaining('wrong or has expired'), findsOneWidget);
+    expect(auth.current, isA<SignedOut>());
+
+    await tester.enterText(find.widgetWithText(TextFormField, '6-digit code'), MockAuthRepository.devOtp);
+    await tester.tap(find.widgetWithText(FilledButton, 'Verify and continue'));
     await settle(tester);
 
-    expect(auth.calls, contains('signIn:asha@example.com'));
+    expect(auth.calls, contains('verifyOtp:+919876543210:${MockAuthRepository.devOtp}'));
     expect(find.text('Set up your profile'), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
+  });
+
+  testWidgets('a new code can be requested only after the cooldown', (tester) async {
+    final auth = RecordingAuthRepository();
+    await pumpNoura(tester, auth: auth, profiles: FakeProfileRepository());
+
+    await tester.tap(find.text('Continue with phone number'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Mobile number'), '+447700900123');
+    await tester.tap(find.widgetWithText(FilledButton, 'Send code'));
+    await settle(tester);
+    expect(auth.calls, ['sendOtp:+447700900123']);
+
+    final resend = find.widgetWithText(TextButton, 'Resend code in ${VerifyOtpScreen.resendCooldownSeconds}s');
+    expect(tester.widget<TextButton>(resend).onPressed, isNull);
+    await tester.pump(const Duration(seconds: VerifyOtpScreen.resendCooldownSeconds));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Resend code'));
+    await settle(tester);
+    expect(auth.calls, ['sendOtp:+447700900123', 'sendOtp:+447700900123']);
+    expect(find.text('We sent a new code.'), findsOneWidget);
+
+    await tester.tap(find.text('Change number'));
+    await tester.pumpAndSettle();
+    expect(find.text('Your mobile number'), findsOneWidget);
   });
 
   testWidgets('a restored session with a completed profile opens the five-tab shell', (tester) async {
@@ -79,13 +124,13 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
-    expect(find.text('asha@example.com'), findsOneWidget);
+    expect(find.text('+919876543210'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Sign out'), 200);
     await tester.tap(find.text('Sign out'));
     await settle(tester);
 
     expect(auth.calls, contains('signOut:null'));
-    expect(find.text('Create account'), findsOneWidget);
+    expect(find.text('Continue with phone number'), findsOneWidget);
   });
 
   testWidgets('an expired session returns to welcome with an explanation', (tester) async {
@@ -93,33 +138,8 @@ void main() {
     await pumpNoura(tester, auth: auth, profiles: FakeProfileRepository());
     auth.emit(const SignedOut(reason: SignOutReason.sessionExpired));
     await settle(tester);
-    expect(find.text('Your session expired. Please sign in again.'), findsOneWidget);
-  });
-
-  testWidgets('password reset request and recovery link flow', (tester) async {
-    final auth = RecordingAuthRepository();
-    await pumpNoura(tester, auth: auth, profiles: FakeProfileRepository());
-
-    await tester.tap(find.text('Sign in'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Forgot password?'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, 'Email'), 'asha@example.com');
-    await tester.tap(find.text('Send reset link'));
-    await settle(tester);
-    expect(auth.calls, contains('reset:asha@example.com'));
-    expect(find.text('Check your email'), findsOneWidget);
-
-    // The recovery deep link arrives: the user must choose a new password first.
-    auth.emit(const PasswordRecovery());
-    await settle(tester);
-    expect(find.text('Choose a new password'), findsOneWidget);
-    await tester.enterText(find.widgetWithText(TextFormField, 'New password'), 'newpass12');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Confirm new password'), 'newpass12');
-    await tester.tap(find.text('Save password'));
-    await settle(tester);
-    expect(auth.calls, contains('updatePassword'));
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Your session ended. Verify your number again to continue.'), findsOneWidget);
+    expect(find.text('Continue with phone number'), findsOneWidget);
   });
 
   testWidgets('a profile that cannot load shows a recoverable error with retry and sign-out', (tester) async {
@@ -163,7 +183,7 @@ void main() {
     await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
     await expectLater(tester, meetsGuideline(textContrastGuideline));
 
-    await tester.tap(find.text('Sign in'));
+    await tester.tap(find.text('Continue with phone number'));
     await tester.pumpAndSettle();
     await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
     await expectLater(tester, meetsGuideline(textContrastGuideline));

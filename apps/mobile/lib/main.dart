@@ -71,7 +71,7 @@ Future<void> main() async {
       publishableKey: config.supabasePublishableKey,
       authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
     );
-    auth = SupabaseAuthRepository(Supabase.instance.client, redirectUrl: config.authRedirectUrl);
+    auth = SupabaseAuthRepository(Supabase.instance.client);
     final apiClient = buildApiClient(buildDio(baseUrl: config.apiBaseUrl, auth: auth));
     profiles = ApiProfileRepository(apiClient);
     diet = ApiDietRepository(apiClient);

@@ -4,7 +4,7 @@ import 'package:noura/app/routes.dart';
 import 'package:noura/core/auth/auth_state.dart';
 import 'package:noura/core/profile/session_profile.dart';
 
-const _user = SignedIn(userId: '00000000-0000-4000-8000-000000000001', email: 'a@example.com');
+const _user = SignedIn(userId: '00000000-0000-4000-8000-000000000001', phone: '+919876543210');
 
 ProfileReady _profile(OnboardingState state) =>
     ProfileReady(SessionProfile(userId: _user.userId, displayName: null, onboarding: state, onboardingStep: null));
@@ -28,15 +28,9 @@ void main() {
       for (final protected in [Routes.home, Routes.meals, Routes.settings, Routes.onboarding, Routes.splash]) {
         expect(_redirect(protected, const SignedOut()), Routes.welcome, reason: protected);
       }
-      for (final public in [Routes.welcome, Routes.signIn, Routes.signUp, Routes.forgotPassword, Routes.verifyEmail]) {
+      for (final public in [Routes.welcome, Routes.signIn, Routes.verifyOtp]) {
         expect(_redirect(public, const SignedOut()), isNull, reason: public);
       }
-      expect(_redirect(Routes.updatePassword, const SignedOut()), Routes.welcome);
-    });
-
-    test('password recovery always goes to the update-password screen', () {
-      expect(_redirect(Routes.home, const PasswordRecovery()), Routes.updatePassword);
-      expect(_redirect(Routes.updatePassword, const PasswordRecovery()), isNull);
     });
 
     test('signed-in users wait for the server profile, and a failure is recoverable', () {

@@ -3,9 +3,6 @@
   "NOURA_API_BASE_URL": "http://10.0.2.2:8080",
   "NOURA_SUPABASE_URL": "http://10.0.2.2:54321",
   "NOURA_SUPABASE_PUBLISHABLE_KEY": "replace-with-local-publishable-key",
-  "NOURA_AUTH_REDIRECT_URL": "noura://auth-callback",
   "NOURA_USE_MOCKS": false,
-  "NOURA_GOOGLE_SIGN_IN_ENABLED": false,
-  "NOURA_APPLE_SIGN_IN_ENABLED": false,
   "NOURA_DEV_BYPASS_ONBOARDING": false
 }

@@ -12,7 +12,7 @@ An Indian-first nutrition and fitness coach. Its primary value is helping users 
 Core loop: onboarding → personal targets → diet/workout plans → scan meal → confirm foods/portions → Meal Balance → Fix My Plate → log actual meal → next-meal guidance → workout logging → weekly patterns/progress → coach.
 
 V1 includes:
-- Email/password, password recovery, Google and Apple authentication.
+- Phone number + one-time SMS code authentication (no passwords, no email or social sign-in; superseded by D-033 in docs/decisions.md).
 - Resumable onboarding; body profile, goals, diet preferences, allergies, food exclusions, budget, cuisine, activity and training preferences.
 - Seven-day diet plan, portions, curated recipe instructions, individual meal swaps and user-requested regeneration.
 - Meal camera/upload, editable recognition, preparation and portion confirmation, approximate nutrition, Meal Balance and concrete plate improvements.
@@ -75,7 +75,7 @@ Five tabs: Home, Meals, Coach, Workout, Progress. Scan is a prominent Home/Meals
 
 | Surface | Required behavior |
 |---|---|
-| Auth | Welcome, sign-in/up, verification, recovery, Google/Apple, cancellation/error states |
+| Auth | Welcome, phone number entry, SMS code verification with resend, session-ended and error states (D-033) |
 | Onboarding | Basics → goals → diet/preferences → training → eligibility/consent → review → submit |
 | Home | Next meal, nutrition summary, today's workout, one insight, scan action |
 | Meals | Diary date selection, daily/weekly plan, manual entry, scan, seven-day patterns |

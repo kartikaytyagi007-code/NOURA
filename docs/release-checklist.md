@@ -19,6 +19,10 @@ beyond wiring in the real configuration once it exists.
 - [ ] Real AI provider account/key/model for meal recognition (M4, D-010) and coach replies (M9, D-031).
       `AI_PROVIDER=mock` is the only path exercised anywhere in this repository's test suites.
 - [ ] Apple and Google developer accounts, app store listings, and screenshots/metadata.
+- [ ] SMS gateway for phone sign-in (D-033): provider account configured in Supabase (Phone provider on,
+      Email and OAuth providers off), TRAI DLT entity/sender/template registration for Indian numbers,
+      SMS rate limits and spend alerts, and an end-to-end sign-in on a real phone. Optionally CAPTCHA
+      against SMS pumping, and a decision on a maximum session length (`[auth.sessions]`, paid plan).
 - [ ] A real analytics/crash-reporting provider if the product wants more than the opt-in telemetry
       interface shipped in M10 (`TelemetryProvider`, `MockTelemetryProvider` only — D-032).
 - [ ] A real `flutter_local_notifications` (or equivalent) integration for reminders — M10 ships only

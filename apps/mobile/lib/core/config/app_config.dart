@@ -16,10 +16,7 @@ class AppConfig {
     required this.apiBaseUrl,
     required this.supabaseUrl,
     required this.supabasePublishableKey,
-    required this.authRedirectUrl,
     required this.useMocks,
-    required this.googleSignInEnabled,
-    required this.appleSignInEnabled,
     required this.devBypassOnboarding,
     this.environmentName,
   });
@@ -32,10 +29,7 @@ class AppConfig {
       apiBaseUrl: const String.fromEnvironment('NOURA_API_BASE_URL'),
       supabaseUrl: const String.fromEnvironment('NOURA_SUPABASE_URL'),
       supabasePublishableKey: const String.fromEnvironment('NOURA_SUPABASE_PUBLISHABLE_KEY'),
-      authRedirectUrl: const String.fromEnvironment('NOURA_AUTH_REDIRECT_URL', defaultValue: 'noura://auth-callback'),
       useMocks: const bool.fromEnvironment('NOURA_USE_MOCKS'),
-      googleSignInEnabled: const bool.fromEnvironment('NOURA_GOOGLE_SIGN_IN_ENABLED'),
-      appleSignInEnabled: const bool.fromEnvironment('NOURA_APPLE_SIGN_IN_ENABLED'),
       devBypassOnboarding: const bool.fromEnvironment('NOURA_DEV_BYPASS_ONBOARDING'),
     );
   }
@@ -45,12 +39,9 @@ class AppConfig {
   final String apiBaseUrl;
   final String supabaseUrl;
   final String supabasePublishableKey;
-  final String authRedirectUrl;
 
   /// Explicit development mocks for auth and API. Never allowed outside development.
   final bool useMocks;
-  final bool googleSignInEnabled;
-  final bool appleSignInEnabled;
 
   /// Development-only escape hatch to view the app shell before onboarding exists (M2).
   final bool devBypassOnboarding;
@@ -92,9 +83,6 @@ class AppConfig {
     }
     if (supabasePublishableKey.isEmpty) {
       issues.add('NOURA_SUPABASE_PUBLISHABLE_KEY is required.');
-    }
-    if (Uri.tryParse(authRedirectUrl)?.hasScheme != true) {
-      issues.add('NOURA_AUTH_REDIRECT_URL must be an absolute URL (for example noura://auth-callback).');
     }
     return issues;
   }

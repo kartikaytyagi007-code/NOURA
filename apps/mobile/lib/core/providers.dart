@@ -10,6 +10,7 @@ import 'diet/diet_repository.dart';
 import 'meals/meal_scan_repository.dart';
 import 'profile/profile_repository.dart';
 import 'profile/session_profile.dart';
+import 'progress/progress_repository.dart';
 import 'recommendations/recommendations_repository.dart';
 import 'workouts/workout_repository.dart';
 
@@ -28,6 +29,9 @@ final recommendationsRepositoryProvider = Provider<RecommendationsRepository>(
 );
 final workoutRepositoryProvider = Provider<WorkoutRepository>(
   (ref) => throw UnimplementedError('workoutRepositoryProvider'),
+);
+final progressRepositoryProvider = Provider<ProgressRepository>(
+  (ref) => throw UnimplementedError('progressRepositoryProvider'),
 );
 
 class AuthController extends Notifier<AuthStatus> {

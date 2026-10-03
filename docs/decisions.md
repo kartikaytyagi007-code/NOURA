@@ -968,3 +968,70 @@ catalog must replace the test fixture, and the set/rep/rest prescriptions (`PRES
 session-sizing heuristic (one exercise per ~8 minutes) are engineering placeholders, not reviewed
 exercise-science guidance, and should be confirmed by a qualified reviewer before this is presented as
 anything more than an explainable heuristic.
+
+## D-030 · Basic Progress Tracking: weight history, honest adherence summaries, and progress-photo retention (M8)
+
+**Scope.** Weight history with starting/current/goal weight, read-only meal-plan-adherence and
+workout-consistency summaries over already-recorded app data, private progress-photo upload/storage/
+deletion, and a pure side-by-side comparison view (blueprint §6, §16 "M8 Progress"). No physique
+analysis, body-fat estimation, or medical judgment from photos or weight data; no automatic plan
+changes from progress data.
+
+**Schema already existed from M1 — no new migration.** `app.weight_logs` and `app.progress_photos`
+(`supabase/migrations/20261001000500_media_scans_logs.sql`) were already defined, RLS-enabled and
+granted (`20261001000800_storage_and_grants.sql`), unused, exactly as M1 built ahead for M3's catalog
+and M4's media tables. `app.media_assets` already carries a `purpose` discriminator including
+`progress_photo` with its own bucket (`progress-photos`), so progress photos reuse M4's exact private-
+media-storage pattern (`packages/domain/src/media/storage.ts`, `apps/api/src/modules/media`) rather
+than a parallel implementation. The OpenAPI operations and schemas (`WeightLog`, `ProgressPhoto`,
+`Progress`, etc.) were also already drafted as `x-noura-status: planned`; this milestone only flips
+them to `implemented` and adds a few additive fields (below).
+
+**Starting/current/goal weight.** "Current" is the latest `weight_logs` entry, falling back to the
+profile's own `weight_kg` (captured at onboarding) when no history exists yet. "Starting" is the
+first-ever `weight_logs` entry by `measured_at`, with the same profile fallback — so a user who never
+logs a second weight still sees a starting/current/goal view, rather than an empty one. "Goal" is the
+active `app.goals` row's `target_weight_kg` (nullable — a goal need not include a weight target).
+These three fields were added to the existing `Progress` schema (`GET /v1/progress`) rather than a new
+endpoint, since they are naturally part of the same "at a glance" view the blueprint already specified.
+
+**Progress-photo retention: blueprint-specified, not D-026's default.** The blueprint is explicit and
+specific here (§14): "logged meal images 90 days unless deleted sooner... progress photos until user
+deletion" — a different retention than meal images, not merely silent on the point. `createUploadSlot`
+(`apps/api/src/modules/media/service.ts`) previously applied a flat 30-day `expires_at` to every
+upload regardless of purpose (D-026's engineering default, carried from M4, itself already short of the
+blueprint's 90-day meal-image figure — an M4-era gap out of this milestone's scope to fix). This
+milestone adds `PURPOSES_WITH_NO_AUTO_EXPIRY = {'progress_photo'}`: a progress-photo upload now gets
+`expires_at = null` (no scheduled purge), while meal-image uploads are unchanged. Deletion is still
+on demand (`DELETE /v1/progress-photos/{id}`, which removes the `progress_photos` row and then deletes
+the backing `media_assets` row/object via M4's existing `deleteMedia`), satisfying "until user
+deletion" exactly.
+
+**Honest adherence: a new `AdherenceSummary` schema, not a bare count.** The ticket explicitly forbids
+presenting a missing plan as a real zero. `buildAdherenceSummary`
+(`packages/domain/src/progress/adherence.ts`) returns `{ plan_active: false, planned: null, logged:
+null }` whenever the user has no active diet or workout plan, and only returns real integers —
+including a genuine `0` — once a plan exists. This mirrors D-028's `coverage_uncertain` convention:
+"no data" and "real zero" are different values, never collapsed into each other. `diet_adherence` and
+`workout_adherence` (`GET /v1/progress`) count only already-elapsed plan items (`date <= today`, in the
+user's own timezone via `packages/domain/src/time/timezone.ts`, reused from M6) — a future planned
+meal or scheduled session is never counted as a miss, matching the blueprint's own wording for workout
+consistency ("scheduled sessions elapsed, excluding future sessions... and rest days"); a rest day is
+simply a day with no `workout_plan_sessions` row, so it is never in the denominator at all.
+
+**Comparison view: pure UI, no new backend surface.** The ticket requires selecting two dates and
+viewing the photos side by side, with an explicit instruction not to analyze physique or estimate body
+fat. `PhotoComparisonScreen` (`apps/mobile/lib/features/progress/photo_comparison_screen.dart`) fetches
+the existing photo list, lets the user pick any two by date, and renders both via M4's existing signed
+`GET /v1/media/{id}/download` — no new endpoint, and no image-content processing of any kind anywhere
+in the request path. A date with no photo shows an explicit "No photo for this date" state rather than
+silently picking a different one.
+
+**Progress-photo upload idempotency.** `createProgressPhoto` is idempotent by `media_id` (one progress-
+photo reference per verified media asset, mirroring M4's `createMealScan`'s dedup-by-media-id), so a
+retried registration after a flaky response never creates a duplicate reference.
+
+**Release gate (open, carried forward).** `MEAL_SCAN_DAILY_QUOTA`-style quotas, a licensed catalog, a
+real AI vision provider, and a scheduled media-purge job remain the same open items as M3-M7; this
+milestone adds nothing new to that list, since progress photos are explicitly retained until deletion
+rather than purged on a schedule.

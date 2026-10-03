@@ -31,3 +31,5 @@ export * from './workouts/substitutions.js';
 export * from './workouts/generate.js';
 export * from './workouts/inputs.js';
 export * from './workouts/storage.js';
+export * from './progress/weight.js';
+export * from './progress/adherence.js';

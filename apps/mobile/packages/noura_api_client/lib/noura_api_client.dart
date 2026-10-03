@@ -27,6 +27,7 @@ export 'package:noura_api_client/src/model/account_export.dart';
 export 'package:noura_api_client/src/model/action_proposal.dart';
 export 'package:noura_api_client/src/model/action_proposal_response.dart';
 export 'package:noura_api_client/src/model/activity_band.dart';
+export 'package:noura_api_client/src/model/adherence_summary.dart';
 export 'package:noura_api_client/src/model/after_changes_scenario.dart';
 export 'package:noura_api_client/src/model/allergy_tag.dart';
 export 'package:noura_api_client/src/model/analyzed_item.dart';

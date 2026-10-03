@@ -26,7 +26,7 @@ describe('OpenAPI contract structure', () => {
     }
   });
 
-  it('implements exactly the M1-M7 operations, each tagged with its milestone', () => {
+  it('implements exactly the M1-M8 operations, each tagged with its milestone', () => {
     const implemented = Object.fromEntries(
       ops.filter((o) => o.status === 'implemented').map((o) => [o.operationId, o.milestone]),
     );
@@ -66,6 +66,13 @@ describe('OpenAPI contract structure', () => {
       createWorkoutLog: 'M7',
       putWorkoutSets: 'M7',
       patchWorkoutLog: 'M7',
+      listWeightLogs: 'M8',
+      createWeightLog: 'M8',
+      deleteWeightLog: 'M8',
+      listProgressPhotos: 'M8',
+      createProgressPhoto: 'M8',
+      deleteProgressPhoto: 'M8',
+      getProgress: 'M8',
     });
   });
 

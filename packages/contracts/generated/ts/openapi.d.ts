@@ -2058,16 +2058,30 @@ export interface components {
       date: string;
       weight_kg: number;
     };
+    /** @description Honest, data-only adherence. When no plan is active, planned/logged are null (never 0) so a missing plan is never mistaken for a real zero (docs/decisions.md D-030). */
+    AdherenceSummary: {
+      plan_active: boolean;
+      planned: number | null;
+      logged: number | null;
+    };
     Progress: {
       /** Format: date */
       period_start: string;
       /** Format: date */
       period_end: string;
       weight_points: components['schemas']['WeightPoint'][];
+      /** @description The user's first-ever recorded weight (weight-history entry, or the onboarding value). */
+      starting_weight_kg: number | null;
+      /** @description The latest weight-history entry, falling back to the profile's recorded weight. */
+      current_weight_kg: number | null;
+      /** @description The active goal's target weight, when one is set. */
+      goal_weight_kg: number | null;
       meal_logged_days: number;
+      diet_adherence: components['schemas']['AdherenceSummary'];
       workouts_completed: number;
       /** @description Scheduled sessions already elapsed; excludes future sessions and rest days. */
       workouts_scheduled_elapsed: number;
+      workout_adherence: components['schemas']['AdherenceSummary'];
     };
     ProgressResponse: {
       data: components['schemas']['Progress'];

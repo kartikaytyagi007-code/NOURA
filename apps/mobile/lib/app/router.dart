@@ -18,7 +18,10 @@ import '../features/meals/meals_screen.dart';
 import '../features/meals/next_meal_screen.dart';
 import '../features/meals/nutrition_insights_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/progress/photo_comparison_screen.dart';
+import '../features/progress/progress_photos_screen.dart';
 import '../features/progress/progress_screen.dart';
+import '../features/progress/weight_history_screen.dart';
 import '../features/session/session_error_screen.dart';
 import '../features/session/splash_screen.dart';
 import '../features/settings/profile_settings_pages.dart';
@@ -104,7 +107,17 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [GoRoute(path: Routes.workout, builder: (_, _) => const WorkoutScreen())],
           ),
           StatefulShellBranch(
-            routes: [GoRoute(path: Routes.progress, builder: (_, _) => const ProgressScreen())],
+            routes: [
+              GoRoute(
+                path: Routes.progress,
+                builder: (_, _) => const ProgressScreen(),
+                routes: [
+                  GoRoute(path: 'weight-history', builder: (_, _) => const WeightHistoryScreen()),
+                  GoRoute(path: 'photos', builder: (_, _) => const ProgressPhotosScreen()),
+                  GoRoute(path: 'compare', builder: (_, _) => const PhotoComparisonScreen()),
+                ],
+              ),
+            ],
           ),
         ],
       ),

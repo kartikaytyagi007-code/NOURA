@@ -1,0 +1,16 @@
+{
+  "name": "@noura/db",
+  "private": true,
+  "type": "module",
+  "description": "NOURA SQL migrations (schema authority) and database security tests.",
+  "scripts": {
+    "reset:plain": "node scripts/reset-plain.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "pg": "8.23.1",
+    "vitest": "5.0.3"
+  }
+}

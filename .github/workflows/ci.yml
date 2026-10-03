@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.5
+
+jobs:
+  backend:
+    name: Backend (lint, typecheck, migrations, API, worker)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      PGHOST: 127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm secrets:check
+      - run: pnpm lint
+      - run: pnpm contracts:lint
+      - run: pnpm -r --filter './packages/*' run build
+      - run: pnpm typecheck
+      - name: Contract and domain unit tests
+        run: pnpm -r --filter './packages/*' run test
+      - name: Database security tests (fresh migrations)
+        working-directory: supabase
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/noura_db_test
+        run: pnpm exec vitest run
+      - name: API tests
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/noura_api_test
+        run: pnpm exec vitest run
+      - name: Worker tests (queue connectivity)
+        working-directory: apps/worker
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/noura_worker_test
+        run: pnpm exec vitest run
+      - run: pnpm --filter @noura/api --filter @noura/worker run build
+
+  contracts:
+    name: Contract drift (TypeScript + Dart clients)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm contracts:check
+
+  mobile:
+    name: Flutter (analyze, test, builds)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --line-length 120 --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test
+      - name: Web build (development placeholders)
+        run: >-
+          flutter build web --release
+          --dart-define-from-file=env/development.example.json
+      - name: Android debug APK (development placeholders)
+        run: flutter build apk --debug --dart-define-from-file=env/development.example.json

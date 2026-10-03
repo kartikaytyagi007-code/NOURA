@@ -1,0 +1,9 @@
+pnpm-lock.yaml
+docs/blueprint.md
+apps/mobile/
+packages/contracts/generated/
+supabase/migrations/
+**/dist/
+**/coverage/
+packages/contracts/openapi.yaml
+supabase/config.toml

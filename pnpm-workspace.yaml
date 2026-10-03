@@ -1,0 +1,11 @@
+packages:
+  - apps/api
+  - apps/worker
+  - packages/*
+  - supabase
+
+# Packages allowed to run install scripts (pnpm blocks others by default).
+onlyBuiltDependencies:
+  - '@openapitools/openapi-generator-cli'
+  - esbuild
+  - supabase

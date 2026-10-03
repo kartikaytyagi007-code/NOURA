@@ -1,0 +1,2963 @@
+openapi: 3.0.3
+info:
+  title: NOURA API
+  version: 0.1.0
+  description: |
+    NOURA (working name) mobile API. This document is the contract authority for the API and the
+    generated Dart client (blueprint §3, §11).
+
+    Conventions:
+    - Base path `/v1`; JSON with snake_case fields; UUID identifiers; ISO-8601 timestamps; metric units.
+    - Bearer authentication with a Supabase access token, except health endpoints and the
+      provider webhook (which uses its own authorization header).
+    - Success envelope: `{"data": {...}, "meta": {"request_id": "..."}}`.
+    - Error envelope: `{"error": {"code", "message", "field_errors", "retryable"}, "meta": {...}}`.
+    - Missing and non-owned resources both return 404.
+    - Mutations require an `Idempotency-Key` header; edits require `expected_revision` and return
+      409 `REVISION_CONFLICT` when stale.
+    - Mutation request bodies reject unrecognized fields (`additionalProperties: false`).
+
+    Every operation carries `x-noura-milestone` (the milestone that implements it) and
+    `x-noura-status` (`implemented` or `planned`). Planned operations are contract drafts only: the
+    API does not register them, and they may be refined (additively where possible) by their milestone.
+  license:
+    name: Proprietary
+    url: https://example.invalid/license
+servers:
+  - url: http://localhost:8080
+    description: Local development API
+security:
+  - bearerAuth: []
+tags:
+  - name: system
+    description: Health and readiness probes.
+  - name: profile
+    description: Profile, preferences, onboarding and targets.
+  - name: home
+    description: Home summary.
+  - name: media
+    description: Private media uploads and downloads.
+  - name: meals
+    description: Meal scans, analysis and diary.
+  - name: catalog
+    description: Curated foods and recipes.
+  - name: diet
+    description: Diet plans and next-meal guidance.
+  - name: insights
+    description: Seven-day patterns.
+  - name: workouts
+    description: Workout plans and logs.
+  - name: progress
+    description: Weight, consistency and progress photos.
+  - name: coach
+    description: Coach chat and proposals.
+  - name: jobs
+    description: Background job status.
+  - name: billing
+    description: Entitlements, usage and billing provider events.
+  - name: account
+    description: Export and account deletion.
+
+paths:
+  /health/live:
+    get:
+      operationId: getLiveness
+      tags: [system]
+      summary: Liveness probe. Does not touch dependencies.
+      security: []
+      x-noura-milestone: M1
+      x-noura-status: implemented
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+  /health/ready:
+    get:
+      operationId: getReadiness
+      tags: [system]
+      summary: Readiness probe. Checks database connectivity, server roles and queue schema.
+      security: []
+      x-noura-milestone: M1
+      x-noura-status: implemented
+      responses:
+        '200':
+          description: Ready to serve traffic.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+        '503':
+          description: A dependency is unavailable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+
+  /v1/me:
+    get:
+      operationId: getMe
+      tags: [profile]
+      summary: Current user's profile, preferences, eligibility, revision and onboarding status.
+      description: Creates an empty profile row on first call for the verified token subject.
+      x-noura-milestone: M1
+      x-noura-status: implemented
+      responses:
+        '200':
+          description: Current user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      operationId: patchMe
+      tags: [profile]
+      summary: Save a partial profile / onboarding step.
+      x-noura-milestone: M2
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfilePatch' }
+      responses:
+        '200':
+          description: Updated profile with incremented revision.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/me/preferences:
+    put:
+      operationId: putPreferences
+      summary: Replace diet preferences.
+      tags: [profile]
+      x-noura-milestone: M2
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PreferencesInput' }
+      responses:
+        '200':
+          description: Saved preferences.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreferencesResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/me/training-preferences:
+    put:
+      operationId: putTrainingPreferences
+      summary: Replace training preferences.
+      tags: [profile]
+      x-noura-milestone: M2
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrainingPreferencesInput' }
+      responses:
+        '200':
+          description: Saved training preferences.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrainingPreferencesResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/onboarding/complete:
+    post:
+      operationId: completeOnboarding
+      tags: [profile]
+      summary: Transactionally completes onboarding, creates target snapshot and plan jobs.
+      x-noura-milestone: M2
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OnboardingCompleteRequest' }
+      responses:
+        '200':
+          description: Profile and created job ids.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OnboardingCompleteResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/targets:
+    get:
+      operationId: getTargets
+      summary: Current nutrition target snapshot.
+      tags: [profile]
+      x-noura-milestone: M2
+      x-noura-status: planned
+      responses:
+        '200':
+          description: Current target snapshot and calculation method.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TargetSnapshotResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/home:
+    get:
+      operationId: getHome
+      summary: Home summary for a date.
+      tags: [home]
+      x-noura-milestone: M6
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/DateQuery'
+      responses:
+        '200':
+          description: Home summary for the date.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HomeResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /v1/media/upload-slots:
+    post:
+      operationId: createUploadSlot
+      summary: Reserve an owner-scoped signed upload slot.
+      tags: [media]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UploadSlotRequest' }
+      responses:
+        '201':
+          description: Owner-scoped signed upload slot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSlotResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/QuotaExceeded' }
+  /v1/media/{id}/complete:
+    post:
+      operationId: completeUpload
+      summary: Confirm an upload and verify the stored bytes.
+      tags: [media]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Verified media status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaAssetResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/media/{id}/download:
+    get:
+      operationId: getMediaDownload
+      summary: Short-lived signed download link for owned media.
+      tags: [media]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Short-lived signed download link.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaDownloadResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/media/{id}:
+    delete:
+      operationId: deleteMedia
+      summary: Delete owned media.
+      tags: [media]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Deletion status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MediaAssetResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/meal-scans:
+    post:
+      operationId: createMealScan
+      summary: Start recognition for an uploaded meal image.
+      tags: [meals]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMealScanRequest' }
+      responses:
+        '202':
+          description: Scan job accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MealScanAcceptedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/QuotaExceeded' }
+  /v1/meal-scans/{id}:
+    get:
+      operationId: getMealScan
+      summary: Meal scan state and recognition candidates.
+      tags: [meals]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Scan state and recognition candidates.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MealScanResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/meal-scans/{id}/confirmed-items:
+    put:
+      operationId: confirmMealScanItems
+      summary: Confirm foods and portions; returns calculated analysis.
+      tags: [meals]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmItemsRequest' }
+      responses:
+        '200':
+          description: Calculated analysis. Not a diary log.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MealAnalysisResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/meal-scans/{id}/plate-fixes:
+    post:
+      operationId: createPlateFixes
+      summary: Propose up to three plate improvements.
+      tags: [meals]
+      x-noura-milestone: M5
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        '200':
+          description: Up to three validated fixes with projected scenarios.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlateFixesResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '503': { $ref: '#/components/responses/ProviderUnavailable' }
+
+  /v1/foods:
+    get:
+      operationId: searchFoods
+      summary: Search the food catalog.
+      tags: [catalog]
+      x-noura-milestone: M3
+      x-noura-status: planned
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Paginated catalog foods.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FoodListResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/recipes/{id}:
+    get:
+      operationId: getRecipe
+      summary: Curated recipe with instructions.
+      tags: [catalog]
+      x-noura-milestone: M3
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Curated recipe with instructions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecipeResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/meal-logs:
+    post:
+      operationId: createMealLog
+      summary: Log a confirmed meal.
+      tags: [meals]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMealLogRequest' }
+      responses:
+        '201':
+          description: Logged meal snapshot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MealLogResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    get:
+      operationId: listMealLogs
+      summary: Meal diary for a date.
+      tags: [meals]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/DateQueryRequired'
+      responses:
+        '200':
+          description: Diary for the date with coverage and totals.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MealDiaryResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/meal-logs/{id}:
+    patch:
+      operationId: patchMealLog
+      summary: Edit a meal log.
+      tags: [meals]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchMealLogRequest' }
+      responses:
+        '200':
+          description: Changed log.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MealLogResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      operationId: deleteMealLog
+      summary: Delete a meal log.
+      tags: [meals]
+      x-noura-milestone: M4
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ExpectedRevisionQuery'
+      responses:
+        '200':
+          description: Deleted; derived summaries invalidated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+
+  /v1/diet-plans/generate:
+    post:
+      operationId: generateDietPlan
+      summary: Request seven-day diet plan generation.
+      tags: [diet]
+      x-noura-milestone: M3
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GeneratePlanRequest' }
+      responses:
+        '202':
+          description: Generation job accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAcceptedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/QuotaExceeded' }
+  /v1/diet-plans/current:
+    get:
+      operationId: getCurrentDietPlan
+      summary: Active weekly diet plan.
+      tags: [diet]
+      x-noura-milestone: M3
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/DateQuery'
+      responses:
+        '200':
+          description: Active weekly plan.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DietPlanResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/diet-plan-meals/{id}/swap-options:
+    post:
+      operationId: getSwapOptions
+      summary: Swap candidates for a plan meal with a daily preview.
+      tags: [diet]
+      x-noura-milestone: M3
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        '200':
+          description: Swap candidates and recalculated daily preview.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SwapOptionsResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ConstraintConflict' }
+  /v1/diet-plan-meals/{id}:
+    put:
+      operationId: replacePlanMeal
+      summary: Replace one plan meal with a confirmed candidate.
+      tags: [diet]
+      x-noura-milestone: M3
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplacePlanMealRequest' }
+      responses:
+        '200':
+          description: Updated plan slot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlanMealResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/recommendations/next-meal:
+    get:
+      operationId: getNextMeal
+      summary: Three grounded next-meal options.
+      tags: [diet]
+      x-noura-milestone: M6
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/DateQueryRequired'
+        - name: slot
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/MealSlot' }
+      responses:
+        '200':
+          description: Up to three grounded options. Never logged automatically.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NextMealResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/insights:
+    get:
+      operationId: getInsights
+      summary: Seven-day nutrition patterns.
+      tags: [insights]
+      x-noura-milestone: M6
+      x-noura-status: planned
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema: { type: string, enum: ['7d'] }
+      responses:
+        '200':
+          description: Seven-day evidence, coverage and explanations.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InsightsResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /v1/workout-plans/generate:
+    post:
+      operationId: generateWorkoutPlan
+      summary: Request weekly workout plan generation.
+      tags: [workouts]
+      x-noura-milestone: M7
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GeneratePlanRequest' }
+      responses:
+        '202':
+          description: Generation job accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobAcceptedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/QuotaExceeded' }
+  /v1/workout-plans/current:
+    get:
+      operationId: getCurrentWorkoutPlan
+      summary: Active weekly workout plan.
+      tags: [workouts]
+      x-noura-milestone: M7
+      x-noura-status: planned
+      responses:
+        '200':
+          description: Week and session prescriptions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutPlanResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/exercises/{id}/substitutions:
+    get:
+      operationId: getExerciseSubstitutions
+      summary: Compatible exercise substitutions.
+      tags: [workouts]
+      x-noura-milestone: M7
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Compatible candidates.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubstitutionsResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/workout-logs:
+    post:
+      operationId: createWorkoutLog
+      summary: Start a workout log for a session.
+      tags: [workouts]
+      x-noura-milestone: M7
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWorkoutLogRequest' }
+      responses:
+        '201':
+          description: Workout log.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutLogResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/workout-logs/{id}/sets:
+    put:
+      operationId: putWorkoutSets
+      summary: Save set logs for a workout.
+      tags: [workouts]
+      x-noura-milestone: M7
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PutWorkoutSetsRequest' }
+      responses:
+        '200':
+          description: Saved log.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutLogResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/workout-logs/{id}:
+    patch:
+      operationId: patchWorkoutLog
+      summary: Mark a workout completed, skipped or abandoned.
+      tags: [workouts]
+      x-noura-milestone: M7
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PatchWorkoutLogRequest' }
+      responses:
+        '200':
+          description: Updated status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutLogResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /v1/weight-logs:
+    get:
+      operationId: listWeightLogs
+      summary: Weight history.
+      tags: [progress]
+      x-noura-milestone: M8
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Weight history, newest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WeightLogListResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      operationId: createWeightLog
+      summary: Record a weight measurement.
+      tags: [progress]
+      x-noura-milestone: M8
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateWeightLogRequest' }
+      responses:
+        '201':
+          description: Weight log.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WeightLogResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/weight-logs/{id}:
+    delete:
+      operationId: deleteWeightLog
+      summary: Delete a weight measurement.
+      tags: [progress]
+      x-noura-milestone: M8
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/progress-photos:
+    get:
+      operationId: listProgressPhotos
+      summary: Private progress photo references.
+      tags: [progress]
+      x-noura-milestone: M8
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Private photo references. No analysis.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProgressPhotoListResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      operationId: createProgressPhoto
+      summary: Register an uploaded progress photo.
+      tags: [progress]
+      x-noura-milestone: M8
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProgressPhotoRequest' }
+      responses:
+        '201':
+          description: Progress photo reference.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProgressPhotoResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/progress-photos/{id}:
+    delete:
+      operationId: deleteProgressPhoto
+      summary: Delete a progress photo.
+      tags: [progress]
+      x-noura-milestone: M8
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Deleted (media removal scheduled).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/progress:
+    get:
+      operationId: getProgress
+      summary: Weight and consistency trends.
+      tags: [progress]
+      x-noura-milestone: M8
+      x-noura-status: planned
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema: { type: string, enum: ['30d'] }
+      responses:
+        '200':
+          description: Weight and consistency trends.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProgressResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /v1/coach/threads:
+    post:
+      operationId: createCoachThread
+      summary: Create a coach thread.
+      tags: [coach]
+      x-noura-milestone: M9
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: New owner thread.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CoachThreadResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /v1/coach/threads/{id}/messages:
+    get:
+      operationId: listCoachMessages
+      summary: Messages in an owned coach thread.
+      tags: [coach]
+      x-noura-milestone: M9
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Messages, oldest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CoachMessageListResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: sendCoachMessage
+      summary: Send a message to the coach.
+      tags: [coach]
+      x-noura-milestone: M9
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendCoachMessageRequest' }
+      responses:
+        '202':
+          description: Reply job accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CoachMessageAcceptedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/QuotaExceeded' }
+  /v1/action-proposals/{id}/apply:
+    post:
+      operationId: applyActionProposal
+      summary: Apply a coach proposal once.
+      tags: [coach]
+      x-noura-milestone: M9
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevisionRequest' }
+      responses:
+        '200':
+          description: Applied exactly once.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActionProposalResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ConstraintConflict' }
+  /v1/action-proposals/{id}/cancel:
+    post:
+      operationId: cancelActionProposal
+      summary: Cancel a coach proposal.
+      tags: [coach]
+      x-noura-milestone: M9
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Cancelled.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActionProposalResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/jobs/{id}:
+    get:
+      operationId: getJob
+      tags: [jobs]
+      summary: User-safe job status. Poll from 2 s backing off to 10 s.
+      x-noura-milestone: M1
+      x-noura-status: implemented
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Job status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JobResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /v1/entitlements:
+    get:
+      operationId: getEntitlements
+      summary: Server-side entitlements.
+      tags: [billing]
+      x-noura-milestone: M10
+      x-noura-status: planned
+      responses:
+        '200':
+          description: Server-side entitlement truth.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntitlementsResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /v1/usage:
+    get:
+      operationId: getUsage
+      summary: Current usage and limits.
+      tags: [billing]
+      x-noura-milestone: M10
+      x-noura-status: planned
+      responses:
+        '200':
+          description: Current usage and limits.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsageResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /v1/billing/sync:
+    post:
+      operationId: syncBilling
+      tags: [billing]
+      summary: Refresh entitlements from the provider. Never accepts a client premium flag.
+      x-noura-milestone: M10
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Refreshed entitlements.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntitlementsResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '503': { $ref: '#/components/responses/ProviderUnavailable' }
+  /v1/webhooks/revenuecat:
+    post:
+      operationId: receiveRevenueCatWebhook
+      summary: RevenueCat webhook receiver.
+      tags: [billing]
+      security:
+        - revenueCatWebhookAuth: []
+      x-noura-milestone: M10
+      x-noura-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevenueCatWebhookRequest' }
+      responses:
+        '200':
+          description: Persisted (and deduplicated) for processing.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookAckResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /v1/account/export:
+    post:
+      operationId: requestAccountExport
+      summary: Request a data export.
+      tags: [account]
+      x-noura-milestone: M10
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Export job accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportAcceptedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/QuotaExceeded' }
+  /v1/account/export/{id}:
+    get:
+      operationId: getAccountExport
+      summary: Export status and download link.
+      tags: [account]
+      x-noura-milestone: M10
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Export state and short-lived download link when ready.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExportResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /v1/account:
+    delete:
+      operationId: deleteAccount
+      tags: [account]
+      summary: Requires a recently issued access token (recent authentication).
+      x-noura-milestone: M10
+      x-noura-status: planned
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeleteAccountRequest' }
+      responses:
+        '202':
+          description: Deletion job accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionAcceptedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase access token. Verified via JWKS with issuer, audience, expiry and subject checks.
+    revenueCatWebhookAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Shared authorization value configured in RevenueCat. Server secret; never in the app.
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated key (UUID recommended). Replays return the original result.
+      schema: { type: string, minLength: 8, maxLength: 255 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, maxLength: 512 }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    DateQuery:
+      name: date
+      in: query
+      required: false
+      description: Local calendar date (YYYY-MM-DD). Defaults to today in the profile timezone.
+      schema: { type: string, format: date }
+    DateQueryRequired:
+      name: date
+      in: query
+      required: true
+      schema: { type: string, format: date }
+    ExpectedRevisionQuery:
+      name: expected_revision
+      in: query
+      required: true
+      schema: { type: integer, minimum: 1 }
+
+  responses:
+    Unauthenticated:
+      description: Missing, invalid or expired access token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: UNAUTHENTICATED, message: Authentication required., field_errors: [], retryable: false }
+            meta: { request_id: 7b0f8c1e-3b8f-4a52-9d55-3d1d1f6a0c11 }
+    NotFound:
+      description: Resource does not exist or is not owned by the caller.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: NOT_FOUND, message: Resource not found., field_errors: [], retryable: false }
+            meta: { request_id: 7b0f8c1e-3b8f-4a52-9d55-3d1d1f6a0c11 }
+    RevisionConflict:
+      description: expected_revision is stale.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ValidationError:
+      description: Invalid content.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Request validation failed.
+              field_errors: [{ field: body.weight_kg, code: maximum, message: must be <= 400 }]
+              retryable: false
+            meta: { request_id: 7b0f8c1e-3b8f-4a52-9d55-3d1d1f6a0c11 }
+    ConstraintConflict:
+      description: No result satisfies the user's constraints; suggested changes included in message.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    QuotaExceeded:
+      description: Rate or quota limit reached.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ProviderUnavailable:
+      description: An upstream provider is unavailable or not configured.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    InternalError:
+      description: Unexpected server error. Details are logged server-side only.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    # ---------------------------------------------------------------- envelopes and shared
+    Meta:
+      type: object
+      additionalProperties: false
+      required: [request_id]
+      properties:
+        request_id: { type: string, minLength: 1, maxLength: 128 }
+    ErrorCode:
+      type: string
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHENTICATED
+        - NOT_FOUND
+        - REVISION_CONFLICT
+        - QUOTA_EXCEEDED
+        - PROVIDER_UNAVAILABLE
+        - UNSUPPORTED_INPUT
+        - CONSTRAINT_CONFLICT
+        - INTERNAL_ERROR
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code, message]
+      properties:
+        field: { type: string, maxLength: 200 }
+        code: { type: string, maxLength: 64 }
+        message: { type: string, maxLength: 300 }
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      required: [code, message, field_errors, retryable]
+      properties:
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string, maxLength: 500 }
+        field_errors:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/FieldError' }
+        retryable: { type: boolean }
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error: { $ref: '#/components/schemas/ErrorBody' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    HealthCheck:
+      type: object
+      additionalProperties: false
+      required: [name, ok]
+      properties:
+        name: { type: string }
+        ok: { type: boolean }
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status, service, version, checks]
+      properties:
+        status: { type: string, enum: [ok, unavailable] }
+        service: { type: string, enum: [api, worker] }
+        version: { type: string }
+        checks:
+          type: array
+          items: { $ref: '#/components/schemas/HealthCheck' }
+    RevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+    Deleted:
+      type: object
+      additionalProperties: false
+      required: [id, deleted]
+      properties:
+        id: { type: string, format: uuid }
+        deleted: { type: boolean }
+    DeletedResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Deleted' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- jobs
+    JobType:
+      type: string
+      enum: [diet_plan, workout_plan, plan_regeneration, meal_scan, coach_reply, weekly_insight]
+    JobStatus:
+      type: string
+      enum: [queued, running, completed, failed, cancelled]
+    SafeError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: { type: string, maxLength: 64 }
+        message: { type: string, maxLength: 500 }
+    Job:
+      type: object
+      additionalProperties: false
+      required: [id, type, status, result_ids, error, poll_after_ms, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/JobType' }
+        status: { $ref: '#/components/schemas/JobStatus' }
+        result_ids:
+          type: object
+          additionalProperties: { type: string, format: uuid }
+        error:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/SafeError' }]
+          nullable: true
+        poll_after_ms:
+          type: integer
+          nullable: true
+          minimum: 2000
+          maximum: 10000
+          description: Suggested delay before the next poll; null once the job is terminal.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+      example:
+        id: 3f8a1b9e-5d2c-4c4e-8f61-2b0b8f8b2d10
+        type: diet_plan
+        status: running
+        result_ids: {}
+        error: null
+        poll_after_ms: 4000
+        created_at: '2026-10-01T09:00:00Z'
+        updated_at: '2026-10-01T09:00:04Z'
+    JobResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Job' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    JobAccepted:
+      type: object
+      additionalProperties: false
+      required: [job_id]
+      properties:
+        job_id: { type: string, format: uuid }
+    JobAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/JobAccepted' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- profile
+    CalculationSex:
+      type: string
+      enum: [female, male]
+      description: Optional parameter for energy equations only. Not gender identity.
+    ActivityBand:
+      type: string
+      enum: [sedentary, light, moderate, active, very_active]
+    UnitSystem:
+      type: string
+      enum: [metric, imperial]
+    OnboardingStatus:
+      type: string
+      enum: [not_started, in_progress, completed]
+    OnboardingStep:
+      type: string
+      enum: [basics, goals, diet, training, eligibility, review]
+    EligibilityStatus:
+      type: string
+      enum: [eligible, tracking_only, needs_review]
+    GoalType:
+      type: string
+      enum: [lose_fat, maintain, gain_muscle, general_health]
+    DietType:
+      type: string
+      enum: [vegetarian, eggatarian, vegan, non_vegetarian]
+    BudgetBand:
+      type: string
+      enum: [low, medium, high]
+    CookingTime:
+      type: string
+      enum: [minimal, moderate, flexible]
+    ExperienceLevel:
+      type: string
+      enum: [beginner, intermediate, advanced]
+    TrainingLocation:
+      type: string
+      enum: [home, gym, both]
+    Profile:
+      type: object
+      additionalProperties: false
+      required: [display_name, age_years, calculation_sex, height_cm, activity_band, timezone, unit_system, revision]
+      properties:
+        display_name: { type: string, nullable: true, minLength: 1, maxLength: 80 }
+        age_years: { type: integer, nullable: true, minimum: 1, maximum: 120 }
+        calculation_sex:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/CalculationSex' }]
+          nullable: true
+        height_cm: { type: number, nullable: true, minimum: 50, maximum: 272 }
+        activity_band:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/ActivityBand' }]
+          nullable: true
+        timezone: { type: string, minLength: 1, maxLength: 64, description: IANA timezone. }
+        unit_system: { $ref: '#/components/schemas/UnitSystem' }
+        revision: { type: integer, minimum: 1 }
+    Onboarding:
+      type: object
+      additionalProperties: false
+      required: [status, step]
+      properties:
+        status: { $ref: '#/components/schemas/OnboardingStatus' }
+        step:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/OnboardingStep' }]
+          nullable: true
+    Preferences:
+      type: object
+      additionalProperties: false
+      required: [diet_type, allergy_ids, exclusion_ids, dislikes, cuisines, budget_band, cooking_time, meals_per_day, revision]
+      properties:
+        diet_type:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/DietType' }]
+          nullable: true
+        allergy_ids: { type: array, maxItems: 30, items: { type: string, maxLength: 64 } }
+        exclusion_ids: { type: array, maxItems: 50, items: { type: string, maxLength: 64 } }
+        dislikes: { type: array, maxItems: 50, items: { type: string, maxLength: 80 } }
+        cuisines: { type: array, maxItems: 20, items: { type: string, maxLength: 64 } }
+        budget_band:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/BudgetBand' }]
+          nullable: true
+        cooking_time:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/CookingTime' }]
+          nullable: true
+        meals_per_day: { type: integer, nullable: true, minimum: 1, maximum: 8 }
+        revision: { type: integer, minimum: 1 }
+    TrainingPreferences:
+      type: object
+      additionalProperties: false
+      required: [experience, location, equipment_ids, weekdays, days_per_week, duration_minutes, limitation_tags, revision]
+      properties:
+        experience:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/ExperienceLevel' }]
+          nullable: true
+        location:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/TrainingLocation' }]
+          nullable: true
+        equipment_ids: { type: array, maxItems: 50, items: { type: string, maxLength: 64 } }
+        weekdays:
+          type: array
+          maxItems: 7
+          uniqueItems: true
+          items: { type: integer, minimum: 1, maximum: 7 }
+        days_per_week: { type: integer, nullable: true, minimum: 1, maximum: 7 }
+        duration_minutes: { type: integer, nullable: true, minimum: 10, maximum: 180 }
+        limitation_tags: { type: array, maxItems: 30, items: { type: string, maxLength: 64 } }
+        revision: { type: integer, minimum: 1 }
+    Me:
+      type: object
+      additionalProperties: false
+      required: [user_id, profile, preferences, training_preferences, eligibility_status, onboarding]
+      properties:
+        user_id: { type: string, format: uuid }
+        profile: { $ref: '#/components/schemas/Profile' }
+        preferences:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/Preferences' }]
+          nullable: true
+        training_preferences:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/TrainingPreferences' }]
+          nullable: true
+        eligibility_status:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/EligibilityStatus' }]
+          nullable: true
+        onboarding: { $ref: '#/components/schemas/Onboarding' }
+      example:
+        user_id: 0d1f8a52-6f2b-4b8e-9a51-6f0f3b0f9a77
+        profile:
+          display_name: null
+          age_years: null
+          calculation_sex: null
+          height_cm: null
+          activity_band: null
+          timezone: UTC
+          unit_system: metric
+          revision: 1
+        preferences: null
+        training_preferences: null
+        eligibility_status: null
+        onboarding: { status: not_started, step: null }
+    MeResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Me' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    GoalInput:
+      type: object
+      additionalProperties: false
+      required: [goal_type]
+      properties:
+        goal_type: { $ref: '#/components/schemas/GoalType' }
+        target_weight_kg: { type: number, nullable: true, minimum: 20, maximum: 400 }
+    ProfilePatch:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      minProperties: 2
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+        display_name: { type: string, minLength: 1, maxLength: 80 }
+        age_years: { type: integer, minimum: 1, maximum: 120 }
+        calculation_sex:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/CalculationSex' }]
+          nullable: true
+        height_cm: { type: number, minimum: 50, maximum: 272 }
+        weight_kg: { type: number, minimum: 20, maximum: 400 }
+        activity_band: { $ref: '#/components/schemas/ActivityBand' }
+        timezone: { type: string, minLength: 1, maxLength: 64 }
+        unit_system: { $ref: '#/components/schemas/UnitSystem' }
+        primary_goal: { $ref: '#/components/schemas/GoalInput' }
+        onboarding_step: { $ref: '#/components/schemas/OnboardingStep' }
+    PreferencesInput:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, diet_type, allergy_ids, exclusion_ids, cuisines, budget_band, cooking_time, meals_per_day]
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+        diet_type: { $ref: '#/components/schemas/DietType' }
+        allergy_ids: { type: array, maxItems: 30, uniqueItems: true, items: { type: string, maxLength: 64 } }
+        exclusion_ids: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, maxLength: 64 } }
+        dislikes: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, maxLength: 80 } }
+        cuisines: { type: array, maxItems: 20, uniqueItems: true, items: { type: string, maxLength: 64 } }
+        budget_band: { $ref: '#/components/schemas/BudgetBand' }
+        cooking_time: { $ref: '#/components/schemas/CookingTime' }
+        meals_per_day: { type: integer, minimum: 1, maximum: 8 }
+    PreferencesResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Preferences' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    TrainingPreferencesInput:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, experience, location, equipment_ids, weekdays, days_per_week, duration_minutes, limitation_tags]
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+        experience: { $ref: '#/components/schemas/ExperienceLevel' }
+        location: { $ref: '#/components/schemas/TrainingLocation' }
+        equipment_ids: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, maxLength: 64 } }
+        weekdays:
+          type: array
+          minItems: 1
+          maxItems: 7
+          uniqueItems: true
+          items: { type: integer, minimum: 1, maximum: 7 }
+        days_per_week: { type: integer, minimum: 1, maximum: 7 }
+        duration_minutes: { type: integer, minimum: 10, maximum: 180 }
+        limitation_tags: { type: array, maxItems: 30, uniqueItems: true, items: { type: string, maxLength: 64 } }
+    TrainingPreferencesResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/TrainingPreferences' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    ConsentType:
+      type: string
+      enum: [terms, privacy, health_data_processing, ai_meal_processing, progress_photo_storage]
+    ConsentInput:
+      type: object
+      additionalProperties: false
+      required: [consent_type, version]
+      properties:
+        consent_type: { $ref: '#/components/schemas/ConsentType' }
+        version: { type: string, minLength: 1, maxLength: 32 }
+    OnboardingCompleteRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, consents]
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+        consents:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { $ref: '#/components/schemas/ConsentInput' }
+    OnboardingComplete:
+      type: object
+      additionalProperties: false
+      required: [me, job_ids]
+      properties:
+        me: { $ref: '#/components/schemas/Me' }
+        job_ids: { type: array, maxItems: 4, items: { type: string, format: uuid } }
+    OnboardingCompleteResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/OnboardingComplete' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    MacroTargets:
+      type: object
+      additionalProperties: false
+      required: [energy_kcal, protein_g, fibre_g, carbohydrate_g, fat_g]
+      properties:
+        energy_kcal: { type: integer, nullable: true, minimum: 0 }
+        protein_g: { type: number, nullable: true, minimum: 0 }
+        fibre_g: { type: number, nullable: true, minimum: 0 }
+        carbohydrate_g: { type: number, nullable: true, minimum: 0 }
+        fat_g: { type: number, nullable: true, minimum: 0 }
+    IntRange:
+      type: object
+      additionalProperties: false
+      required: [min, max]
+      properties:
+        min: { type: integer }
+        max: { type: integer }
+    NumberRange:
+      type: object
+      additionalProperties: false
+      required: [min, max]
+      properties:
+        min: { type: number }
+        max: { type: number }
+    TargetSnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, profile_revision, policy_version, method, method_reference, eligibility, estimated_energy_kcal, targets, valid_from]
+      properties:
+        id: { type: string, format: uuid }
+        profile_revision: { type: integer, minimum: 1 }
+        policy_version: { type: string }
+        method: { type: string, enum: [policy, user_override] }
+        method_reference: { type: string, nullable: true }
+        eligibility: { $ref: '#/components/schemas/EligibilityStatus' }
+        estimated_energy_kcal:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/IntRange' }]
+          nullable: true
+        targets: { $ref: '#/components/schemas/MacroTargets' }
+        valid_from: { type: string, format: date-time }
+    TargetSnapshotResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/TargetSnapshot' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- nutrition shared
+    Nutrients:
+      type: object
+      additionalProperties: false
+      description: Null means unknown. Unknown is never reported as zero.
+      required: [energy_kcal, protein_g, carbohydrate_g, fat_g, fibre_g]
+      properties:
+        energy_kcal: { type: number, nullable: true, minimum: 0 }
+        protein_g: { type: number, nullable: true, minimum: 0 }
+        carbohydrate_g: { type: number, nullable: true, minimum: 0 }
+        fat_g: { type: number, nullable: true, minimum: 0 }
+        fibre_g: { type: number, nullable: true, minimum: 0 }
+    Coverage:
+      type: object
+      additionalProperties: false
+      required: [items_total, items_with_nutrition, complete]
+      properties:
+        items_total: { type: integer, minimum: 0 }
+        items_with_nutrition: { type: integer, minimum: 0 }
+        complete: { type: boolean }
+    NutrientTotals:
+      type: object
+      additionalProperties: false
+      required: [nutrients, coverage]
+      properties:
+        nutrients: { $ref: '#/components/schemas/Nutrients' }
+        coverage: { $ref: '#/components/schemas/Coverage' }
+    SourceRef:
+      type: object
+      additionalProperties: false
+      required: [source_id, source_name, source_version]
+      properties:
+        source_id: { type: string, format: uuid }
+        source_name: { type: string }
+        source_version: { type: string }
+    MealSlot:
+      type: string
+      enum: [breakfast, lunch, dinner, snack]
+    Uncertainty:
+      type: string
+      enum: [low, medium, high]
+    OilLevel:
+      type: string
+      enum: [none, light, medium, heavy, unknown]
+    PreparationInput:
+      type: object
+      additionalProperties: false
+      properties:
+        method: { type: string, maxLength: 64 }
+        oil_level: { $ref: '#/components/schemas/OilLevel' }
+        source: { type: string, enum: [homemade, restaurant, packaged, unknown] }
+    ServingInput:
+      type: object
+      additionalProperties: false
+      required: [unit, quantity]
+      properties:
+        unit: { type: string, maxLength: 32 }
+        quantity: { type: number, exclusiveMinimum: true, minimum: 0, maximum: 50 }
+    ConfirmedItemInput:
+      type: object
+      additionalProperties: false
+      description: Exactly one of grams or serving must be provided (validated server-side).
+      required: [label]
+      properties:
+        temporary_id: { type: string, maxLength: 32 }
+        food_id: { type: string, format: uuid, nullable: true }
+        recipe_id: { type: string, format: uuid, nullable: true }
+        label: { type: string, minLength: 1, maxLength: 200 }
+        grams: { type: number, exclusiveMinimum: true, minimum: 0, maximum: 3000 }
+        serving: { $ref: '#/components/schemas/ServingInput' }
+        preparation: { $ref: '#/components/schemas/PreparationInput' }
+    AnalyzedItem:
+      type: object
+      additionalProperties: false
+      required: [item_id, label, food_id, recipe_id, source, grams, grams_range, nutrients, uncertainty]
+      properties:
+        item_id: { type: string, format: uuid }
+        label: { type: string }
+        food_id: { type: string, format: uuid, nullable: true }
+        recipe_id: { type: string, format: uuid, nullable: true }
+        source:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/SourceRef' }]
+          nullable: true
+        grams: { type: number, nullable: true }
+        grams_range:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/NumberRange' }]
+          nullable: true
+        nutrients:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/Nutrients' }]
+          nullable: true
+        uncertainty:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/Uncertainty' }]
+          nullable: true
+    MealBalanceComponent:
+      type: object
+      additionalProperties: false
+      required: [key, score, max_score, evidence]
+      properties:
+        key: { type: string, enum: [protein, fibre, vegetable_fruit, variety] }
+        score: { type: number, nullable: true, minimum: 0, maximum: 25 }
+        max_score: { type: integer, minimum: 25, maximum: 25, description: Each component is capped at 25 in policy v1. }
+        evidence: { type: object, additionalProperties: true }
+    MealBalance:
+      type: object
+      additionalProperties: false
+      description: Explainable product heuristic, not a medical health score.
+      required: [score, policy_version, components, missing_data_message]
+      properties:
+        score: { type: integer, nullable: true, minimum: 0, maximum: 100 }
+        policy_version: { type: string }
+        components:
+          type: array
+          maxItems: 4
+          items: { $ref: '#/components/schemas/MealBalanceComponent' }
+        missing_data_message: { type: string, nullable: true }
+
+    # ---------------------------------------------------------------- home
+    PlanMealPreview:
+      type: object
+      additionalProperties: false
+      required: [plan_meal_id, slot, title]
+      properties:
+        plan_meal_id: { type: string, format: uuid }
+        slot: { $ref: '#/components/schemas/MealSlot' }
+        title: { type: string }
+    WorkoutSessionPreview:
+      type: object
+      additionalProperties: false
+      required: [session_id, title, status]
+      properties:
+        session_id: { type: string, format: uuid }
+        title: { type: string }
+        status: { type: string, enum: [scheduled, rescheduled, cancelled, completed, skipped] }
+    InsightSummary:
+      type: object
+      additionalProperties: false
+      required: [key, text]
+      properties:
+        key: { type: string }
+        text: { type: string, maxLength: 500 }
+    Home:
+      type: object
+      additionalProperties: false
+      required: [date, nutrition, next_meal, todays_workout, insight, plan_generation]
+      properties:
+        date: { type: string, format: date }
+        nutrition: { $ref: '#/components/schemas/NutrientTotals' }
+        next_meal:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/PlanMealPreview' }]
+          nullable: true
+        todays_workout:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/WorkoutSessionPreview' }]
+          nullable: true
+        insight:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/InsightSummary' }]
+          nullable: true
+        plan_generation:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/Job' }]
+          nullable: true
+    HomeResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Home' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- media and scans
+    MediaPurpose:
+      type: string
+      enum: [meal, progress_photo]
+    ImageMime:
+      type: string
+      enum: [image/jpeg, image/png, image/webp]
+    UploadSlotRequest:
+      type: object
+      additionalProperties: false
+      required: [purpose, mime, size_bytes]
+      properties:
+        purpose: { $ref: '#/components/schemas/MediaPurpose' }
+        mime: { $ref: '#/components/schemas/ImageMime' }
+        size_bytes: { type: integer, minimum: 1, maximum: 10485760 }
+    UploadSlot:
+      type: object
+      additionalProperties: false
+      required: [media_id, upload_url, expires_at]
+      properties:
+        media_id: { type: string, format: uuid }
+        upload_url: { type: string, format: uri }
+        expires_at: { type: string, format: date-time }
+    UploadSlotResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/UploadSlot' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    MediaAsset:
+      type: object
+      additionalProperties: false
+      required: [id, purpose, status, verified_mime, byte_size, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        purpose: { type: string, enum: [meal, progress_photo, export] }
+        status: { type: string, enum: [awaiting_upload, uploaded, verified, rejected, deleted] }
+        verified_mime: { type: string, nullable: true }
+        byte_size: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+    MediaAssetResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MediaAsset' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    MediaDownload:
+      type: object
+      additionalProperties: false
+      required: [url, expires_at]
+      properties:
+        url: { type: string, format: uri }
+        expires_at: { type: string, format: date-time }
+    MediaDownloadResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MediaDownload' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    CreateMealScanRequest:
+      type: object
+      additionalProperties: false
+      required: [media_id]
+      properties:
+        media_id: { type: string, format: uuid }
+    MealScanAccepted:
+      type: object
+      additionalProperties: false
+      required: [job_id, scan_id]
+      properties:
+        job_id: { type: string, format: uuid }
+        scan_id: { type: string, format: uuid }
+    MealScanAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MealScanAccepted' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    RecognitionItem:
+      type: object
+      additionalProperties: false
+      required: [temporary_id, label, alternative_labels, confidence_band, estimated_grams, preparation_questions, needs_confirmation, catalog_candidates]
+      properties:
+        temporary_id: { type: string, maxLength: 32 }
+        label: { type: string, maxLength: 200 }
+        alternative_labels: { type: array, maxItems: 5, items: { type: string, maxLength: 200 } }
+        confidence_band: { type: string, enum: [low, medium, high] }
+        estimated_grams:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/NumberRange' }]
+          nullable: true
+        preparation_questions: { type: array, maxItems: 5, items: { type: string, maxLength: 200 } }
+        needs_confirmation: { type: boolean }
+        catalog_candidates:
+          type: array
+          maxItems: 5
+          items: { type: string, format: uuid }
+    Recognition:
+      type: object
+      additionalProperties: false
+      required: [schema_version, image_is_food, quality, items, clarification]
+      properties:
+        schema_version: { type: string, enum: ['1'] }
+        image_is_food: { type: boolean }
+        quality: { type: string, enum: [usable, blurry, too_dark, ambiguous, unusable] }
+        items:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/RecognitionItem' }
+        clarification: { type: string, nullable: true, maxLength: 300 }
+    MealScanStatus:
+      type: string
+      enum: [awaiting_upload, queued, recognizing, needs_confirmation, ready, failed, cancelled, expired]
+    MealScan:
+      type: object
+      additionalProperties: false
+      required: [id, status, recognition, revision, error, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/MealScanStatus' }
+        recognition:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/Recognition' }]
+          nullable: true
+        revision: { type: integer, minimum: 1 }
+        error:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/SafeError' }]
+          nullable: true
+        created_at: { type: string, format: date-time }
+    MealScanResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MealScan' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    ConfirmItemsRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, items]
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/ConfirmedItemInput' }
+    MealAnalysis:
+      type: object
+      additionalProperties: false
+      required: [scan_id, revision, items, totals, meal_balance]
+      properties:
+        scan_id: { type: string, format: uuid }
+        revision: { type: integer, minimum: 1 }
+        items:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/AnalyzedItem' }
+        totals: { $ref: '#/components/schemas/NutrientTotals' }
+        meal_balance: { $ref: '#/components/schemas/MealBalance' }
+    MealAnalysisResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MealAnalysis' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    ProjectedScenario:
+      type: object
+      additionalProperties: false
+      description: Calculated from a concrete proposed plate. Projected, not actual intake.
+      required: [label, totals, meal_balance]
+      properties:
+        label: { type: string, enum: [projected] }
+        totals: { $ref: '#/components/schemas/NutrientTotals' }
+        meal_balance: { $ref: '#/components/schemas/MealBalance' }
+    PlateAction:
+      type: object
+      additionalProperties: false
+      required: [type, item_id, catalog_food_id, proposed_grams, reason, projected, requires_confirmation]
+      properties:
+        type: { type: string, enum: [keep, reduce, add, replace] }
+        item_id: { type: string, format: uuid, nullable: true }
+        catalog_food_id: { type: string, format: uuid, nullable: true }
+        proposed_grams: { type: number, nullable: true, minimum: 0 }
+        reason: { type: string, maxLength: 300 }
+        projected: { $ref: '#/components/schemas/ProjectedScenario' }
+        requires_confirmation: { type: boolean, description: Always true; a fix never applies without user confirmation. }
+    PlateFixes:
+      type: object
+      additionalProperties: false
+      required: [scan_id, revision, fixes]
+      properties:
+        scan_id: { type: string, format: uuid }
+        revision: { type: integer, minimum: 1 }
+        fixes:
+          type: array
+          maxItems: 3
+          items: { $ref: '#/components/schemas/PlateAction' }
+    PlateFixesResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/PlateFixes' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- catalog
+    ServingConversion:
+      type: object
+      additionalProperties: false
+      description: Household units map to documented gram ranges; never universally fixed.
+      required: [unit, grams_min, grams_max]
+      properties:
+        unit: { type: string, maxLength: 32 }
+        grams_min: { type: number, minimum: 0 }
+        grams_max: { type: number, minimum: 0 }
+    Food:
+      type: object
+      additionalProperties: false
+      required: [id, name, aliases, nutrient_basis, per_100g, serving_conversions, diet_tags, allergen_tags, allergen_coverage, source]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        aliases: { type: array, items: { type: string } }
+        nutrient_basis: { type: string, enum: [raw, cooked, as_sold] }
+        per_100g: { $ref: '#/components/schemas/Nutrients' }
+        serving_conversions:
+          type: array
+          items: { $ref: '#/components/schemas/ServingConversion' }
+        diet_tags: { type: array, items: { type: string } }
+        allergen_tags: { type: array, items: { type: string } }
+        allergen_coverage: { type: string, enum: [complete, partial, unknown] }
+        source: { $ref: '#/components/schemas/SourceRef' }
+    FoodList:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/Food' }
+        next_cursor: { type: string, nullable: true }
+    FoodListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/FoodList' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    RecipeIngredient:
+      type: object
+      additionalProperties: false
+      required: [food_id, name, edible_grams]
+      properties:
+        food_id: { type: string, format: uuid }
+        name: { type: string }
+        edible_grams: { type: number, minimum: 0 }
+    Recipe:
+      type: object
+      additionalProperties: false
+      required: [id, name, cuisine, tags, diet_tags, ingredients, instructions, cooked_yield_g, servings, cooking_minutes, nutrition_per_serving]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        cuisine: { type: string, nullable: true }
+        tags: { type: array, items: { type: string } }
+        diet_tags: { type: array, items: { type: string } }
+        ingredients:
+          type: array
+          items: { $ref: '#/components/schemas/RecipeIngredient' }
+        instructions: { type: array, items: { type: string } }
+        cooked_yield_g: { type: number, nullable: true }
+        servings: { type: integer, nullable: true }
+        cooking_minutes: { type: integer, nullable: true }
+        nutrition_per_serving:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/NutrientTotals' }]
+          nullable: true
+    RecipeResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Recipe' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- meal logs
+    CreateMealLogRequest:
+      type: object
+      additionalProperties: false
+      required: [client_id, consumed_at, timezone, slot, items]
+      properties:
+        client_id: { type: string, format: uuid }
+        consumed_at: { type: string, format: date-time }
+        timezone: { type: string, minLength: 1, maxLength: 64 }
+        slot: { $ref: '#/components/schemas/MealSlot' }
+        scan_id: { type: string, format: uuid, nullable: true }
+        plan_meal_id: { type: string, format: uuid, nullable: true }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/ConfirmedItemInput' }
+    PatchMealLogRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      minProperties: 2
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+        consumed_at: { type: string, format: date-time }
+        slot: { $ref: '#/components/schemas/MealSlot' }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/ConfirmedItemInput' }
+    MealLog:
+      type: object
+      additionalProperties: false
+      required: [id, client_id, consumed_at, local_date, slot, scan_id, plan_meal_id, items, totals, meal_balance, revision]
+      properties:
+        id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        consumed_at: { type: string, format: date-time }
+        local_date: { type: string, format: date }
+        slot: { $ref: '#/components/schemas/MealSlot' }
+        scan_id: { type: string, format: uuid, nullable: true }
+        plan_meal_id: { type: string, format: uuid, nullable: true }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AnalyzedItem' }
+        totals: { $ref: '#/components/schemas/NutrientTotals' }
+        meal_balance:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/MealBalance' }]
+          nullable: true
+        revision: { type: integer, minimum: 1 }
+    MealLogResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MealLog' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    MealDiary:
+      type: object
+      additionalProperties: false
+      required: [date, logs, totals]
+      properties:
+        date: { type: string, format: date }
+        logs:
+          type: array
+          items: { $ref: '#/components/schemas/MealLog' }
+        totals: { $ref: '#/components/schemas/NutrientTotals' }
+    MealDiaryResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/MealDiary' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- diet plans
+    GeneratePlanRequest:
+      type: object
+      additionalProperties: false
+      required: [start_date, profile_revision]
+      properties:
+        start_date: { type: string, format: date }
+        profile_revision: { type: integer, minimum: 1 }
+    PortionRef:
+      type: object
+      additionalProperties: false
+      required: [food_id, recipe_id, label, grams_min, grams_max]
+      properties:
+        food_id: { type: string, format: uuid, nullable: true }
+        recipe_id: { type: string, format: uuid, nullable: true }
+        label: { type: string }
+        grams_min: { type: number, minimum: 0 }
+        grams_max: { type: number, minimum: 0 }
+    RecipeRef:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    PlanMeal:
+      type: object
+      additionalProperties: false
+      required: [id, date, slot, slot_ordinal, recipe, portions, nutrition, revision]
+      properties:
+        id: { type: string, format: uuid }
+        date: { type: string, format: date }
+        slot: { $ref: '#/components/schemas/MealSlot' }
+        slot_ordinal: { type: integer, minimum: 1, maximum: 4 }
+        recipe:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/RecipeRef' }]
+          nullable: true
+        portions:
+          type: array
+          items: { $ref: '#/components/schemas/PortionRef' }
+        nutrition: { $ref: '#/components/schemas/NutrientTotals' }
+        revision: { type: integer, minimum: 1 }
+    PlanMealResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/PlanMeal' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    PlanDay:
+      type: object
+      additionalProperties: false
+      required: [date, meals, totals]
+      properties:
+        date: { type: string, format: date }
+        meals:
+          type: array
+          items: { $ref: '#/components/schemas/PlanMeal' }
+        totals: { $ref: '#/components/schemas/NutrientTotals' }
+    DietPlan:
+      type: object
+      additionalProperties: false
+      required: [id, version, starts_on, status, target_snapshot_id, days]
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        starts_on: { type: string, format: date }
+        status: { type: string, enum: [active, superseded] }
+        target_snapshot_id: { type: string, format: uuid }
+        days:
+          type: array
+          maxItems: 7
+          items: { $ref: '#/components/schemas/PlanDay' }
+    DietPlanResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/DietPlan' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    SwapCandidate:
+      type: object
+      additionalProperties: false
+      required: [candidate_id, recipe, portions, nutrition, daily_totals_preview]
+      properties:
+        candidate_id: { type: string, maxLength: 64 }
+        recipe: { $ref: '#/components/schemas/RecipeRef' }
+        portions:
+          type: array
+          items: { $ref: '#/components/schemas/PortionRef' }
+        nutrition: { $ref: '#/components/schemas/NutrientTotals' }
+        daily_totals_preview: { $ref: '#/components/schemas/NutrientTotals' }
+    SwapOptions:
+      type: object
+      additionalProperties: false
+      required: [plan_meal_id, revision, candidates]
+      properties:
+        plan_meal_id: { type: string, format: uuid }
+        revision: { type: integer, minimum: 1 }
+        candidates:
+          type: array
+          maxItems: 5
+          items: { $ref: '#/components/schemas/SwapCandidate' }
+    SwapOptionsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/SwapOptions' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    ReplacePlanMealRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, candidate_id]
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+        candidate_id: { type: string, maxLength: 64 }
+    NextMealOption:
+      type: object
+      additionalProperties: false
+      required: [recipe, portions, nutrition, reason]
+      properties:
+        recipe: { $ref: '#/components/schemas/RecipeRef' }
+        portions:
+          type: array
+          items: { $ref: '#/components/schemas/PortionRef' }
+        nutrition: { $ref: '#/components/schemas/NutrientTotals' }
+        reason: { type: string, maxLength: 300 }
+    NextMeal:
+      type: object
+      additionalProperties: false
+      required: [date, slot, logged_meals, limited_context, explanation, options]
+      properties:
+        date: { type: string, format: date }
+        slot: { $ref: '#/components/schemas/MealSlot' }
+        logged_meals: { type: integer, minimum: 0 }
+        limited_context: { type: boolean }
+        explanation: { type: string, nullable: true, maxLength: 500 }
+        options:
+          type: array
+          maxItems: 3
+          items: { $ref: '#/components/schemas/NextMealOption' }
+    NextMealResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/NextMeal' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    Insight:
+      type: object
+      additionalProperties: false
+      required: [key, evidence, explanation]
+      properties:
+        key: { type: string, maxLength: 64 }
+        evidence: { type: object, additionalProperties: true }
+        explanation: { type: string, nullable: true, maxLength: 1000 }
+    Insights:
+      type: object
+      additionalProperties: false
+      required: [period_start, period_end, logged_meals, days_with_logs, insights, focus]
+      properties:
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        logged_meals: { type: integer, minimum: 0 }
+        days_with_logs: { type: integer, minimum: 0, maximum: 7 }
+        insights:
+          type: array
+          maxItems: 3
+          items: { $ref: '#/components/schemas/Insight' }
+        focus:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/Insight' }]
+          nullable: true
+    InsightsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Insights' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- workouts
+    ExerciseRef:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    PrescribedExercise:
+      type: object
+      additionalProperties: false
+      required: [id, exercise, ordinal, sets, reps_min, reps_max, rest_sec, effort_cue]
+      properties:
+        id: { type: string, format: uuid }
+        exercise: { $ref: '#/components/schemas/ExerciseRef' }
+        ordinal: { type: integer, minimum: 1 }
+        sets: { type: integer, minimum: 1, maximum: 20 }
+        reps_min: { type: integer, minimum: 1, maximum: 100 }
+        reps_max: { type: integer, minimum: 1, maximum: 100 }
+        rest_sec: { type: integer, minimum: 0, maximum: 900 }
+        effort_cue: { type: string, nullable: true }
+    WorkoutSession:
+      type: object
+      additionalProperties: false
+      required: [id, date, order, title, status, exercises]
+      properties:
+        id: { type: string, format: uuid }
+        date: { type: string, format: date }
+        order: { type: integer, minimum: 1 }
+        title: { type: string }
+        status: { type: string, enum: [scheduled, rescheduled, cancelled] }
+        exercises:
+          type: array
+          items: { $ref: '#/components/schemas/PrescribedExercise' }
+    WorkoutPlan:
+      type: object
+      additionalProperties: false
+      required: [id, version, starts_on, revision, sessions]
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        starts_on: { type: string, format: date }
+        revision: { type: integer, minimum: 1 }
+        sessions:
+          type: array
+          items: { $ref: '#/components/schemas/WorkoutSession' }
+    WorkoutPlanResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/WorkoutPlan' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    SubstitutionCandidate:
+      type: object
+      additionalProperties: false
+      required: [exercise, equipment_tags, reason]
+      properties:
+        exercise: { $ref: '#/components/schemas/ExerciseRef' }
+        equipment_tags: { type: array, items: { type: string } }
+        reason: { type: string, maxLength: 300 }
+    Substitutions:
+      type: object
+      additionalProperties: false
+      required: [exercise_id, candidates]
+      properties:
+        exercise_id: { type: string, format: uuid }
+        candidates:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/SubstitutionCandidate' }
+    SubstitutionsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Substitutions' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    CreateWorkoutLogRequest:
+      type: object
+      additionalProperties: false
+      required: [client_id, session_id]
+      properties:
+        client_id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        started_at: { type: string, format: date-time }
+    SetLogInput:
+      type: object
+      additionalProperties: false
+      required: [exercise_id, set_ordinal, reps, load_kg, skipped]
+      properties:
+        exercise_id: { type: string, format: uuid }
+        set_ordinal: { type: integer, minimum: 1, maximum: 50 }
+        reps: { type: integer, nullable: true, minimum: 0, maximum: 500 }
+        load_kg: { type: number, nullable: true, minimum: 0, maximum: 1000 }
+        skipped: { type: boolean }
+    PutWorkoutSetsRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, sets]
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+        sets:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/SetLogInput' }
+    PatchWorkoutLogRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, status]
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+        status: { type: string, enum: [completed, skipped, abandoned] }
+        completed_at: { type: string, format: date-time }
+    WorkoutLog:
+      type: object
+      additionalProperties: false
+      required: [id, client_id, session_id, status, started_at, completed_at, sets, revision]
+      properties:
+        id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        session_id: { type: string, format: uuid }
+        status: { type: string, enum: [in_progress, completed, skipped, abandoned] }
+        started_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        sets:
+          type: array
+          items: { $ref: '#/components/schemas/SetLogInput' }
+        revision: { type: integer, minimum: 1 }
+    WorkoutLogResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/WorkoutLog' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- progress
+    CreateWeightLogRequest:
+      type: object
+      additionalProperties: false
+      required: [client_id, measured_at, weight_kg]
+      properties:
+        client_id: { type: string, format: uuid }
+        measured_at: { type: string, format: date-time }
+        weight_kg: { type: number, minimum: 20, maximum: 400 }
+    WeightLog:
+      type: object
+      additionalProperties: false
+      required: [id, client_id, measured_at, weight_kg]
+      properties:
+        id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        measured_at: { type: string, format: date-time }
+        weight_kg: { type: number }
+    WeightLogResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/WeightLog' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    WeightLogList:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/WeightLog' }
+        next_cursor: { type: string, nullable: true }
+    WeightLogListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/WeightLogList' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    PhotoAngle:
+      type: string
+      enum: [front, side, back]
+    CreateProgressPhotoRequest:
+      type: object
+      additionalProperties: false
+      required: [media_id, captured_at, angle]
+      properties:
+        media_id: { type: string, format: uuid }
+        captured_at: { type: string, format: date-time }
+        angle: { $ref: '#/components/schemas/PhotoAngle' }
+    ProgressPhoto:
+      type: object
+      additionalProperties: false
+      required: [id, media_id, captured_at, angle]
+      properties:
+        id: { type: string, format: uuid }
+        media_id: { type: string, format: uuid }
+        captured_at: { type: string, format: date-time }
+        angle: { $ref: '#/components/schemas/PhotoAngle' }
+    ProgressPhotoResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/ProgressPhoto' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    ProgressPhotoList:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/ProgressPhoto' }
+        next_cursor: { type: string, nullable: true }
+    ProgressPhotoListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/ProgressPhotoList' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    WeightPoint:
+      type: object
+      additionalProperties: false
+      required: [date, weight_kg]
+      properties:
+        date: { type: string, format: date }
+        weight_kg: { type: number }
+    Progress:
+      type: object
+      additionalProperties: false
+      required: [period_start, period_end, weight_points, meal_logged_days, workouts_completed, workouts_scheduled_elapsed]
+      properties:
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        weight_points:
+          type: array
+          items: { $ref: '#/components/schemas/WeightPoint' }
+        meal_logged_days: { type: integer, minimum: 0 }
+        workouts_completed: { type: integer, minimum: 0 }
+        workouts_scheduled_elapsed:
+          type: integer
+          minimum: 0
+          description: Scheduled sessions already elapsed; excludes future sessions and rest days.
+    ProgressResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Progress' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- coach
+    CoachThread:
+      type: object
+      additionalProperties: false
+      required: [id, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+    CoachThreadResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/CoachThread' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    ActionProposal:
+      type: object
+      additionalProperties: false
+      required: [id, type, status, expected_revision, expires_at, applied_at, summary]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [swap_meal, regenerate_day, reschedule_workout] }
+        status: { type: string, enum: [pending, applied, cancelled, expired, failed] }
+        expected_revision: { type: integer, minimum: 1 }
+        expires_at: { type: string, format: date-time }
+        applied_at: { type: string, format: date-time, nullable: true }
+        summary: { type: string, maxLength: 300 }
+    ActionProposalResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/ActionProposal' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    CoachCard:
+      type: object
+      additionalProperties: false
+      required: [type, title, ref_id]
+      properties:
+        type: { type: string, enum: [meal, workout, insight] }
+        title: { type: string, maxLength: 120 }
+        ref_id: { type: string, format: uuid, nullable: true }
+    CoachMessage:
+      type: object
+      additionalProperties: false
+      required: [id, role, content, status, error, cards, action_proposal, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string }
+        status: { type: string, enum: [pending, completed, failed] }
+        error:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/SafeError' }]
+          nullable: true
+        cards:
+          type: array
+          maxItems: 5
+          items: { $ref: '#/components/schemas/CoachCard' }
+        action_proposal:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/ActionProposal' }]
+          nullable: true
+        created_at: { type: string, format: date-time }
+    CoachMessageList:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/CoachMessage' }
+        next_cursor: { type: string, nullable: true }
+    CoachMessageListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/CoachMessageList' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    SendCoachMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [client_id, message]
+      properties:
+        client_id: { type: string, format: uuid }
+        message: { type: string, minLength: 1, maxLength: 2000 }
+    CoachMessageAccepted:
+      type: object
+      additionalProperties: false
+      required: [job_id, message]
+      properties:
+        job_id: { type: string, format: uuid }
+        message: { $ref: '#/components/schemas/CoachMessage' }
+    CoachMessageAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/CoachMessageAccepted' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- billing
+    Entitlement:
+      type: object
+      additionalProperties: false
+      required: [key, is_active, provider_status, expires_at, last_verified_at]
+      properties:
+        key: { type: string }
+        is_active: { type: boolean }
+        provider_status: { type: string }
+        expires_at: { type: string, format: date-time, nullable: true }
+        last_verified_at: { type: string, format: date-time }
+    Entitlements:
+      type: object
+      additionalProperties: false
+      required: [entitlements]
+      properties:
+        entitlements:
+          type: array
+          items: { $ref: '#/components/schemas/Entitlement' }
+    EntitlementsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Entitlements' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    FeatureUsage:
+      type: object
+      additionalProperties: false
+      required: [feature, period, limit, used, reserved]
+      properties:
+        feature: { type: string, enum: [meal_scan, coach_reply, diet_plan, workout_plan, plan_regeneration] }
+        period: { type: string }
+        limit: { type: integer, nullable: true, minimum: 0, description: Finite configured limit; null only when not yet configured. }
+        used: { type: integer, minimum: 0 }
+        reserved: { type: integer, minimum: 0 }
+    Usage:
+      type: object
+      additionalProperties: false
+      required: [timezone, features]
+      properties:
+        timezone: { type: string }
+        features:
+          type: array
+          items: { $ref: '#/components/schemas/FeatureUsage' }
+    UsageResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Usage' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    RevenueCatWebhookRequest:
+      type: object
+      description: Provider-defined payload; persisted minimally then reconciled against provider state.
+      additionalProperties: true
+      required: [event]
+      properties:
+        api_version: { type: string }
+        event:
+          type: object
+          additionalProperties: true
+          required: [id, type]
+          properties:
+            id: { type: string, maxLength: 200 }
+            type: { type: string, maxLength: 64 }
+            app_user_id: { type: string }
+            environment: { type: string }
+    WebhookAck:
+      type: object
+      additionalProperties: false
+      required: [received]
+      properties:
+        received: { type: boolean }
+    WebhookAckResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/WebhookAck' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    # ---------------------------------------------------------------- account
+    ExportAccepted:
+      type: object
+      additionalProperties: false
+      required: [export_id, job_id]
+      properties:
+        export_id: { type: string, format: uuid }
+        job_id: { type: string, format: uuid }
+    ExportAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/ExportAccepted' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    AccountExport:
+      type: object
+      additionalProperties: false
+      required: [id, state, download_url, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        state: { type: string, enum: [queued, running, completed, failed, expired] }
+        download_url: { type: string, format: uri, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+    ExportResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/AccountExport' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    DeleteAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [confirm]
+      properties:
+        confirm: { type: string, enum: [DELETE_MY_ACCOUNT] }
+    DeletionAccepted:
+      type: object
+      additionalProperties: false
+      required: [deletion_request_id, state]
+      properties:
+        deletion_request_id: { type: string, format: uuid }
+        state: { type: string, enum: [requested, in_progress] }
+    DeletionAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/DeletionAccepted' }
+        meta: { $ref: '#/components/schemas/Meta' }

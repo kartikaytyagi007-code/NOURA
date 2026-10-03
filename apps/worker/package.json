@@ -1,0 +1,29 @@
+{
+  "name": "@noura/worker",
+  "private": true,
+  "type": "module",
+  "description": "NOURA background worker (pg-boss). Same image as the API, separate process role.",
+  "main": "./dist/worker.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev": "tsx watch --env-file-if-exists=.env src/worker.ts",
+    "start": "node dist/worker.js",
+    "test": "vitest run",
+    "queue:migrate": "node dist/queue-migrate.js",
+    "queue:migrate:dev": "tsx --env-file-if-exists=.env src/queue-migrate.ts"
+  },
+  "dependencies": {
+    "@noura/ai": "workspace:*",
+    "@noura/domain": "workspace:*",
+    "pg": "8.23.1",
+    "pg-boss": "12.35.1",
+    "pino": "10.3.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "tsx": "4.23.15",
+    "vitest": "5.0.3"
+  }
+}

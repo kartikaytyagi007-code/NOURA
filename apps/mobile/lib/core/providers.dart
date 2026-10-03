@@ -3,16 +3,20 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:noura_api_client/noura_api_client.dart';
 
+import 'account/account_repository.dart';
 import 'auth/auth_repository.dart';
 import 'auth/auth_state.dart';
+import 'billing/billing_repository.dart';
 import 'coach/coach_repository.dart';
 import 'config/app_config.dart';
 import 'diet/diet_repository.dart';
 import 'meals/meal_scan_repository.dart';
+import 'notifications/notifications_repository.dart';
 import 'profile/profile_repository.dart';
 import 'profile/session_profile.dart';
 import 'progress/progress_repository.dart';
 import 'recommendations/recommendations_repository.dart';
+import 'telemetry/telemetry_provider.dart';
 import 'workouts/workout_repository.dart';
 
 /// Overridden in main.dart (and tests) with validated, environment-specific instances.
@@ -35,6 +39,19 @@ final progressRepositoryProvider = Provider<ProgressRepository>(
   (ref) => throw UnimplementedError('progressRepositoryProvider'),
 );
 final coachRepositoryProvider = Provider<CoachRepository>((ref) => throw UnimplementedError('coachRepositoryProvider'));
+final billingRepositoryProvider = Provider<BillingRepository>(
+  (ref) => throw UnimplementedError('billingRepositoryProvider'),
+);
+final notificationsRepositoryProvider = Provider<NotificationsRepository>(
+  (ref) => throw UnimplementedError('notificationsRepositoryProvider'),
+);
+final reminderSchedulerProvider = Provider<ReminderScheduler>(
+  (ref) => throw UnimplementedError('reminderSchedulerProvider'),
+);
+final accountRepositoryProvider = Provider<AccountRepository>(
+  (ref) => throw UnimplementedError('accountRepositoryProvider'),
+);
+final telemetryProvider = Provider<TelemetryProvider>((ref) => throw UnimplementedError('telemetryProvider'));
 
 class AuthController extends Notifier<AuthStatus> {
   @override

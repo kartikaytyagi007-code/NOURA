@@ -7,7 +7,9 @@ import { idempotencyKeyFrom, withIdempotency } from '../../plugins/idempotency.j
 import { registerOperation } from '../../plugins/openapi-routes.js';
 import {
   completeOnboarding,
+  getNotificationPreferences,
   patchProfile,
+  putNotificationPreferences,
   putPreferences,
   putTrainingPreferences,
 } from './service.js';
@@ -55,6 +57,23 @@ export function registerProfileRoutes(app: FastifyInstance, deps: AppDeps): void
     const body = request.body as Schemas['TrainingPreferencesInput'];
     const data = await idempotent(request, userId, 'putTrainingPreferences', (client) =>
       putTrainingPreferences(client, userId, body),
+    );
+    return { data, meta: { request_id: request.id } };
+  });
+
+  registerOperation(app, deps.verifyToken, 'getNotificationPreferences', async (request) => {
+    const { userId } = requireAuth(request);
+    const data = await deps.db.forUser(userId, (client) =>
+      getNotificationPreferences(client, userId),
+    );
+    return { data, meta: { request_id: request.id } };
+  });
+
+  registerOperation(app, deps.verifyToken, 'putNotificationPreferences', async (request) => {
+    const { userId } = requireAuth(request);
+    const body = request.body as Schemas['NotificationPreferencesInput'];
+    const data = await idempotent(request, userId, 'putNotificationPreferences', (client) =>
+      putNotificationPreferences(client, userId, body),
     );
     return { data, meta: { request_id: request.id } };
   });

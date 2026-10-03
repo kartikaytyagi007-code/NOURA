@@ -2,19 +2,18 @@ import { randomUUID } from 'node:crypto';
 import {
   AppError,
   computeMealBalance,
+  dailyQuotaFor,
   isUuid,
   loadCatalogFoods,
   resolveConfirmedItems,
   sumAnalyzedNutrition,
   type AnalyzedItemOut,
+  type FeatureQuota,
   type Queryable,
 } from '@noura/domain';
 import type { components } from '@noura/contracts';
 
 type Schemas = components['schemas'];
-
-/** Provisional daily cap (release-gate item alongside the target/catalog policies): see docs/decisions.md. */
-const MEAL_SCAN_DAILY_QUOTA = 20;
 
 const conflict = (what: string) =>
   new AppError(
@@ -74,6 +73,7 @@ export async function createMealScan(
   client: Queryable,
   userId: string,
   body: Schemas['CreateMealScanRequest'],
+  quota: FeatureQuota,
 ): Promise<Schemas['MealScanAccepted']> {
   if (!isUuid(body.media_id)) {
     throw new AppError('NOT_FOUND', 'Resource not found.');
@@ -120,7 +120,8 @@ export async function createMealScan(
       [userId, today],
     )
   ).rows[0]!;
-  if (Number(used.count) >= MEAL_SCAN_DAILY_QUOTA) {
+  const limit = await dailyQuotaFor(client, userId, quota);
+  if (Number(used.count) >= limit) {
     throw new AppError(
       'QUOTA_EXCEEDED',
       'You have reached today’s meal-scan limit. Try again tomorrow.',

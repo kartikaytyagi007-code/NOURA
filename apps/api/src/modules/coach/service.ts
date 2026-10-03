@@ -1,13 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { AppError, isUuid, type Queryable } from '@noura/domain';
+import { AppError, dailyQuotaFor, isUuid, type FeatureQuota, type Queryable } from '@noura/domain';
 import type { components } from '@noura/contracts';
 import { replacePlanMeal } from '../diet/service.js';
 
 type Schemas = components['schemas'];
-
-/** Provisional daily cap (blueprint §13 "five coach replies/day"); release-gate item alongside the
- * other quota numbers in docs/decisions.md. */
-const COACH_REPLY_DAILY_QUOTA = 5;
 
 const conflict = (what: string) =>
   new AppError(
@@ -199,6 +195,7 @@ export async function sendCoachMessage(
   userId: string,
   threadId: string,
   body: Schemas['SendCoachMessageRequest'],
+  quota: FeatureQuota,
 ): Promise<Schemas['CoachMessageAccepted']> {
   await requireOwnedThread(client, userId, threadId);
 
@@ -241,7 +238,8 @@ export async function sendCoachMessage(
       [userId, today],
     )
   ).rows[0]!;
-  if (Number(used.count) >= COACH_REPLY_DAILY_QUOTA) {
+  const limit = await dailyQuotaFor(client, userId, quota);
+  if (Number(used.count) >= limit) {
     throw new AppError(
       'QUOTA_EXCEEDED',
       "You've reached today's coach-reply limit. Try again tomorrow.",

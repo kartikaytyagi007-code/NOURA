@@ -15,6 +15,9 @@ abstract final class Routes {
   static const settingsPreferences = '/settings/preferences';
   static const settingsTraining = '/settings/training';
   static const settingsEligibility = '/settings/eligibility';
+  static const settingsReminders = '/settings/reminders';
+  static const settingsBilling = '/settings/billing';
+  static const settingsAccountData = '/settings/account-data';
 
   static const home = '/home';
   static const meals = '/meals';

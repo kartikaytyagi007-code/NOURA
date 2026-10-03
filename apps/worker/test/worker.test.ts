@@ -5,7 +5,7 @@ import { PgBoss } from 'pg-boss';
 import { pino } from 'pino';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../src/config.js';
-import { relayGenerationRequests, startRelayLoop } from '../src/relay.js';
+import { relayAccountRequests, relayGenerationRequests, startRelayLoop } from '../src/relay.js';
 import { startWorker, type WorkerRuntime } from '../src/runtime.js';
 
 const log = pino({ level: 'silent' });
@@ -109,6 +109,20 @@ describe('worker configuration', () => {
     ).toThrow(/AI_PROVIDER/);
   });
 
+  it('fails closed in production without a real auth-admin provider (account deletion)', () => {
+    expect(() =>
+      loadConfig({
+        APP_ENV: 'production',
+        WORKER_DATABASE_URL: 'postgresql://x@localhost/db',
+        AI_PROVIDER: 'gemini',
+        AI_API_KEY: 'placeholder',
+        AI_MODEL_ID: 'placeholder',
+        SUPABASE_URL: 'https://project.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 'placeholder-service-role-key',
+      }),
+    ).toThrow(/AUTH_ADMIN_PROVIDER/);
+  });
+
   it('disables automatic queue-schema migration in deployed environments by default', () => {
     const config = loadConfig({
       APP_ENV: 'production',
@@ -118,6 +132,7 @@ describe('worker configuration', () => {
       AI_MODEL_ID: 'placeholder',
       SUPABASE_URL: 'https://project.supabase.co',
       SUPABASE_SERVICE_ROLE_KEY: 'placeholder-service-role-key',
+      AUTH_ADMIN_PROVIDER: 'supabase',
     });
     expect(config.migrate).toBe(false);
     expect(
@@ -237,5 +252,61 @@ describe('generation request relay (transactional outbox)', () => {
     await new Promise((r) => setTimeout(r, 100));
     expect(stoppedAt).toBeGreaterThanOrEqual(3);
     expect(runs).toBe(stoppedAt);
+  });
+});
+
+describe('account export/deletion relay (transactional outbox, M10)', () => {
+  const relayPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+  afterAll(async () => {
+    await relayPool.end();
+  });
+
+  async function newExportRequest(): Promise<{ userId: string; id: string }> {
+    const userId = randomUUID();
+    await admin.query('insert into auth.users (id, email) values ($1, $2)', [
+      userId,
+      `${userId}@test.invalid`,
+    ]);
+    const { rows } = await admin.query<{ id: string }>(
+      `insert into app.export_requests (user_id, state) values ($1, 'queued') returning id`,
+      [userId],
+    );
+    return { userId, id: rows[0]!.id };
+  }
+
+  async function newDeletionRequest(): Promise<{ userId: string; id: string }> {
+    const userId = randomUUID();
+    await admin.query('insert into auth.users (id, email) values ($1, $2)', [
+      userId,
+      `${userId}@test.invalid`,
+    ]);
+    const { rows } = await admin.query<{ id: string }>(
+      `insert into app.deletion_requests (user_id, state) values ($1, 'requested') returning id`,
+      [userId],
+    );
+    return { userId, id: rows[0]!.id };
+  }
+
+  it('dispatches an export request exactly once with an ids-only payload', async () => {
+    const { userId, id } = await newExportRequest();
+    const first = await relayAccountRequests(relayPool, runtime.boss, log);
+    expect(first.dispatched).toBeGreaterThanOrEqual(1);
+    const job = await producer.getJobById(QUEUES.accountExport, id);
+    expect(job?.data).toEqual({ export_request_id: id, user_id: userId });
+
+    const second = await relayAccountRequests(relayPool, runtime.boss, log);
+    const { rows } = await admin.query(
+      'select queue_job_id from app.export_requests where id = $1',
+      [id],
+    );
+    expect(rows[0].queue_job_id).toBe(id);
+    expect(second.dispatched).toBe(0);
+  });
+
+  it('dispatches a deletion request exactly once with an ids-only payload', async () => {
+    const { userId, id } = await newDeletionRequest();
+    await relayAccountRequests(relayPool, runtime.boss, log);
+    const job = await producer.getJobById(QUEUES.accountDelete, id);
+    expect(job?.data).toEqual({ deletion_request_id: id, user_id: userId });
   });
 });

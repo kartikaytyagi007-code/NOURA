@@ -84,6 +84,9 @@ import 'package:noura_api_client/src/model/next_meal_action_response.dart';
 import 'package:noura_api_client/src/model/next_meal_action_result.dart';
 import 'package:noura_api_client/src/model/next_meal_option.dart';
 import 'package:noura_api_client/src/model/next_meal_response.dart';
+import 'package:noura_api_client/src/model/notification_preferences.dart';
+import 'package:noura_api_client/src/model/notification_preferences_input.dart';
+import 'package:noura_api_client/src/model/notification_preferences_response.dart';
 import 'package:noura_api_client/src/model/number_range.dart';
 import 'package:noura_api_client/src/model/nutrient_totals.dart';
 import 'package:noura_api_client/src/model/nutrients.dart';
@@ -432,6 +435,19 @@ ReturnType deserialize<ReturnType, BaseType>(
       return NextMealResponse.fromJson(value as Map<String, dynamic>)
           as ReturnType;
     case 'NextMealSource':
+    case 'NotificationPreferences':
+      return NotificationPreferences.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'NotificationPreferencesInput':
+      return NotificationPreferencesInput.fromJson(
+            value as Map<String, dynamic>,
+          )
+          as ReturnType;
+    case 'NotificationPreferencesResponse':
+      return NotificationPreferencesResponse.fromJson(
+            value as Map<String, dynamic>,
+          )
+          as ReturnType;
     case 'NumberRange':
       return NumberRange.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'NutrientTotals':

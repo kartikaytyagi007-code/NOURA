@@ -1,5 +1,6 @@
 import {
   GENERATION_REQUEST_QUEUES,
+  QUEUES,
   withSystemTransaction,
   type PoolLike,
   type QueuePayloads,
@@ -66,6 +67,65 @@ export async function relayGenerationRequests(
       );
       result.dispatched += 1;
     }
+    return result;
+  });
+}
+
+/**
+ * Same transactional-outbox shape as `relayGenerationRequests`, for `app.export_requests` and
+ * `app.deletion_requests` — tables with their own dedicated state machines (not `generation_requests`
+ * rows) but the same "dispatch to pg-boss exactly once" columns added in
+ * 20261001001400_m10_billing_notifications_account.sql.
+ */
+export async function relayAccountRequests(
+  pool: PoolLike,
+  boss: Pick<PgBoss, 'send'>,
+  log: Logger,
+  options: { batchSize?: number } = {},
+): Promise<RelayResult> {
+  const batchSize = options.batchSize ?? 25;
+  return withSystemTransaction(pool, 'noura_worker', async (client) => {
+    const result: RelayResult = { dispatched: 0, skipped: 0 };
+
+    const { rows: exportRows } = await client.query<{ id: string; user_id: string }>(
+      `select id, user_id from app.export_requests
+         where state = 'queued' and queue_job_id is null
+         order by requested_at limit $1 for update skip locked`,
+      [batchSize],
+    );
+    for (const row of exportRows) {
+      const payload: QueuePayloads['account.export'] = {
+        export_request_id: row.id,
+        user_id: row.user_id,
+      };
+      await boss.send(QUEUES.accountExport, payload, { id: row.id });
+      await client.query(
+        `update app.export_requests set queue_name = $2, queue_job_id = $1 where id = $1 and queue_job_id is null`,
+        [row.id, QUEUES.accountExport],
+      );
+      result.dispatched += 1;
+    }
+
+    const { rows: deletionRows } = await client.query<{ id: string; user_id: string }>(
+      `select id, user_id from app.deletion_requests
+         where state = 'requested' and queue_job_id is null
+         order by requested_at limit $1 for update skip locked`,
+      [batchSize],
+    );
+    for (const row of deletionRows) {
+      const payload: QueuePayloads['account.delete'] = {
+        deletion_request_id: row.id,
+        user_id: row.user_id,
+      };
+      await boss.send(QUEUES.accountDelete, payload, { id: row.id });
+      await client.query(
+        `update app.deletion_requests set queue_name = $2, queue_job_id = $1 where id = $1 and queue_job_id is null`,
+        [row.id, QUEUES.accountDelete],
+      );
+      result.dispatched += 1;
+    }
+
+    if (result.dispatched > 0) log.info(result, 'relayed account export/deletion requests');
     return result;
   });
 }

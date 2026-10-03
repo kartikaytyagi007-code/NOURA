@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@noura/ai": "workspace:*",
+    "@noura/billing": "workspace:*",
     "@noura/domain": "workspace:*",
     "pg": "8.23.1",
     "pg-boss": "12.35.1",

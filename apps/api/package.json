@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@noura/billing": "workspace:*",
     "@noura/contracts": "workspace:*",
     "@noura/domain": "workspace:*",
     "fastify": "5.12.5",

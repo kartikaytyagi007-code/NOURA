@@ -995,3 +995,126 @@ How the M9 acceptance gate maps to tests:
 ### M10 hand-off
 
 Not scoped by this milestone.
+
+## M10 · Release hardening: billing/entitlements, quotas, local reminders, telemetry, export/deletion (FINAL V1 MILESTONE)
+
+This is the last milestone in the blueprint's V1 scope (§16). It does not hand off to an M11 — any item
+left open below is tracked in `docs/release-checklist.md`, not in a future milestone ticket.
+
+### Delivered
+
+- **Billing/entitlements (`packages/billing`, `apps/api/src/modules/billing/`):** `BillingProvider` and
+  `AuthAdminProvider` adapters (mock-first, fail-closed outside development/test, D-010 pattern).
+  `receiveRevenueCatWebhook` verifies the webhook's own authorization header (not a bearer JWT),
+  deduplicates by `(provider, provider_event_id)`, and reconciles entitlement state with a
+  last-verified-at guard so out-of-order or re-delivered events can never roll back a newer state.
+  `GET /v1/entitlements`, `GET /v1/usage`, `POST /v1/billing/sync` (restore purchases) added and
+  implemented.
+- **Entitlement-aware quotas:** `packages/domain/src/billing/limits.ts` (`isPremiumUser`,
+  `dailyQuotaFor`) replaces M4's `MEAL_SCAN_DAILY_QUOTA` and M9's `COACH_REPLY_DAILY_QUOTA` hardcoded
+  constants; free-tier numbers are unchanged (3 meal scans/day, 5 coach replies/day), now configurable
+  via `MEAL_SCAN_FREE_DAILY_QUOTA`/`MEAL_SCAN_PREMIUM_DAILY_QUOTA`/`COACH_REPLY_FREE_DAILY_QUOTA`/
+  `COACH_REPLY_PREMIUM_DAILY_QUOTA`.
+- **Local reminders:** `GET`/`PUT /v1/me/notification-preferences` (new operations) persist consent and
+  chosen reminder times on `app.user_preferences.reminder_settings`. No push token, device-registration
+  endpoint or push-sending code exists anywhere — blueprint §18 scopes V1 to local-device notifications
+  only. Flutter's `ReminderScheduler` interface is the integration seam; `NoOpReminderScheduler` is the
+  only implementation shipped (see Known limitations).
+- **Telemetry:** `TelemetryProvider` (`apps/mobile/lib/core/telemetry/`), a closed event enum plus
+  flat coarse properties only — no path for health/meal/chat/photo content or PII to flow through it.
+  Opt-in (`enabled: false` by default). `MockTelemetryProvider` is the only implementation wired.
+- **Account export/deletion (`apps/worker/src/handlers/account-export.ts`,
+  `apps/worker/src/handlers/account-delete.ts`):** both are real transactional-outbox worker jobs (new
+  queue-dispatch columns + relay policies in `20261001001400_m10_billing_notifications_account.sql`,
+  mirroring the pre-existing `generation_requests` pattern). Deletion cancels queued generation jobs,
+  removes Storage objects and owned rows, then deletes the auth identity via `AuthAdminProvider`, in a
+  three-transaction structure that avoids a real lock-contention deadlock between the open transaction
+  and the identity-deletion cascade (see D-032). Export builds a JSON manifest (profile, plans, logs,
+  photo manifest) from the same domain tables every other feature reads, excluding secrets.
+  `POST /v1/account/export`, `GET /v1/account/export/{id}`, `POST /v1/account/delete` implemented;
+  `requireRecentAuth` rejects a stale token before a deletion is accepted.
+- **Flutter:** `BillingRepository`/`NotificationsRepository`/`AccountRepository` (API + mock
+  implementations), wired into `core/providers.dart` and `main.dart`; three new settings screens
+  (`RemindersScreen`, `BillingScreen`, `AccountDataScreen`) replace the M1-M9 `FeaturePlaceholder`
+  entries and are reachable from `SettingsScreen` via `/settings/reminders`, `/settings/billing`,
+  `/settings/account-data`.
+- **Contracts:** `getEntitlements`, `getUsage`, `syncBilling`, `receiveRevenueCatWebhook`,
+  `requestAccountExport`, `getAccountExport`, `deleteAccount` flipped to `x-noura-status: implemented`;
+  new `getNotificationPreferences`/`putNotificationPreferences` operations added and implemented. TS and
+  Dart clients regenerated and committed.
+- **Database:** `supabase/migrations/20261001001400_m10_billing_notifications_account.sql` (additive
+  queue-dispatch columns, indexes, worker-relay RLS policies and column-guard triggers for
+  `export_requests`/`deletion_requests`); new "M10 entitlements/usage/export/deletion owner isolation"
+  block in `supabase/tests/security.test.ts`.
+- **Docs:** decision D-032; this M10 section; `docs/release-checklist.md` (new, consolidates every open
+  release gate from M1-M10); `docs/runbooks/` (see below).
+
+### Acceptance checks (run 2026-10-03 in the development container)
+
+| Check                                         | Command                                                            | Result                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| Secret scan                                   | `pnpm secrets:check`                                               | Passed (819 files)                                         |
+| Lint and format                               | `pnpm lint`                                                        | Passed                                                     |
+| Typecheck                                     | `pnpm typecheck`                                                   | Passed (7 workspace projects)                              |
+| Billing package unit tests                    | `packages/billing`: `vitest run`                                   | Passed. 18 tests                                           |
+| Domain unit tests                             | `packages/domain`: `vitest run`                                    | Passed. 191 tests                                          |
+| Contracts unit tests                          | `packages/contracts`: `vitest run`                                 | Passed. 13 tests                                           |
+| AI package unit tests (unchanged by M10)      | `packages/ai`: `vitest run`                                        | Passed. 19 tests                                           |
+| Migrations, RLS, grants, M10 owner-isolation  | `supabase`: `vitest run` against PostgreSQL 16                     | Passed. 67 tests (63 from M1-M9, 4 new)                    |
+| API integration (billing/account/quotas)      | `apps/api`: `vitest run`                                           | Passed. 177 tests (162 from M1-M9, 15 new)                 |
+| Worker (account export/delete handlers+relay) | `apps/worker`: `vitest run`                                        | Passed. 56 tests (47 from M1-M9, 9 new)                    |
+| Backend build (api+worker)                    | `pnpm --filter @noura/api --filter @noura/worker run build`        | Passed                                                     |
+| Flutter format, analyze and tests             | `dart format --line-length 120`, `flutter analyze`, `flutter test` | Passed. No issues; 147 tests (139 from M1-M9, 8 new)       |
+| Contract drift                                | `pnpm contracts:check`                                             | Clean after commit (regenerated TS/Dart clients committed) |
+
+How the M10 acceptance gate maps to tests:
+
+- **Replay-safe billing events:** `billing.test.ts` posts the same webhook event id twice and asserts
+  the second delivery is a no-op; `revenuecat-parse.test.ts` and `mock.test.ts` cover malformed payloads
+  and webhook-auth rejection. `reconcile.test.ts` (domain) proves an older `last_verified_at` can never
+  overwrite a newer entitlement row, directly exercising the "events may arrive out of order" requirement.
+- **A forged client premium flag never unlocks paid API features:** `billing.test.ts`/`limits.test.ts`
+  assert `dailyQuotaFor` reads `app.entitlements` server-side only; no request body or header the client
+  controls is ever consulted for premium status anywhere in `apps/api`.
+- **Ownership:** `security.test.ts`'s new M10 block proves cross-user denial on `entitlements`,
+  `usage_reservations`, `export_requests` and `deletion_requests`, and that the worker relay's visibility
+  is scoped by request state, never by user context, matching the pre-existing `generation_requests`
+  precedent exactly.
+- **Deletion/export correctness across interruption:** `account-delete.test.ts` and
+  `account-export.test.ts` cover precheck idempotency (an already-terminal or missing request is a
+  no-op), the full cascade (generation jobs cancelled, Storage objects removed, auth identity deleted via
+  a provider that really deletes in the test), and the export manifest excluding secrets.
+- **Recently-issued-token requirement for deletion:** `account.test.ts` asserts `deleteAccount` 422s on
+  a stale/missing issued-at claim before any deletion request is created.
+
+### Known limitations and release gates
+
+All items below, plus every open item carried from M1-M9 (D-018, D-025–D-031), are consolidated in
+`docs/release-checklist.md`. This is the authoritative pre-production list; nothing further is deferred
+to a future milestone, because there is no M11.
+
+- **No real billing provider exercised.** `BILLING_PROVIDER=mock` is the only path run in this
+  environment; `RevenueCatBillingProvider`/`SupabaseAuthAdminProvider` are unit-tested against fixed
+  fixtures only, never a live project (no RevenueCat/Supabase project is configured here).
+- **No real push/local-notification plugin wired.** `NoOpReminderScheduler` schedules nothing; a real
+  `flutter_local_notifications` integration needs native Android/iOS project changes this environment
+  cannot build/verify against a real device.
+- **No real analytics/crash-reporting provider wired.** `MockTelemetryProvider` (opt-in, in-memory only)
+  is the only implementation; the interface is ready for a real provider, which is unselected.
+- **No scheduled purge jobs** for the 24-hour export/failed-upload or 7-day unlogged-scan retention
+  windows the blueprint proposes — consistent with every prior milestone's documented gap; deletion
+  itself is immediate and user-initiated.
+- Android/iOS builds, the container image, Google/Apple sign-in and a production backup/restore drill
+  remain unverified here, unchanged from M1-M9. No Docker daemon is available in this container; the
+  plain-Postgres shim (D-012) was used for all database tests, as in every prior milestone.
+- `MEAL_SCAN_*_DAILY_QUOTA`/`COACH_REPLY_*_DAILY_QUOTA` remain provisional engineering numbers, not
+  reviewed product limits (carried from M4/M9).
+- The licensed nutrition/exercise catalog and clinical/safety review of M9's `checkSafety` remain open
+  (carried from D-025–D-031).
+
+### M11 hand-off
+
+**None. This is the final V1 milestone.** V1 is feature-complete against the blueprint's milestone table
+(§16) as of this commit, pending the release gates in `docs/release-checklist.md` — every one of which
+requires real external accounts/credentials or a physical device/store this sandboxed environment does
+not have, not further engineering work inside this repository.

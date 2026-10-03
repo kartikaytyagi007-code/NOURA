@@ -1179,3 +1179,115 @@ job exists yet (user-initiated deletion is available now); and, as with every pr
 milestone, a real provider adapter, key and model must be benchmarked and reviewed (blueprint §17)
 before `AI_PROVIDER=mock` is no longer the only exercised path. M10 is not started or scoped by this
 milestone.
+
+## D-032 · Release hardening: billing/entitlements, free-tier quotas, local reminders, telemetry, export/deletion (M10, final V1 milestone)
+
+**Billing/entitlement adapter, mock-first and fail-closed, matching D-010 exactly.** A new
+`@noura/billing` package defines `BillingProvider` (`verifyWebhookAuth`, `parseWebhookEvent`,
+`fetchSubscriberEntitlements`) and `AuthAdminProvider` (`deleteUser`), each with a `mock` implementation
+(development/test only) and a real implementation (`revenuecat`/`supabase`) that calls the real
+RevenueCat REST API / Supabase Admin REST API. `createBillingProvider`/`createAuthAdminProvider` refuse
+to start with `mock` outside `development`/`test`, and refuse `revenuecat`/`supabase` without their
+required secret configured, the identical shape to `createAiProvider`. Neither real adapter has been
+exercised against a live RevenueCat or Supabase project in this environment — no such project is
+configured here — so, as with D-011's OAuth providers and D-010's `recognizeMeal`, their request/response
+shapes are unit-tested against fixed fixtures only. **This is a release gate**, not a limitation
+specific to this milestone: production cannot start with `BILLING_PROVIDER=revenuecat` until a real
+RevenueCat project, webhook secret and API key exist and have been smoke-tested end to end.
+
+**Webhook handling implements every blueprint §13 requirement, not just signature verification.**
+`receiveWebhook` (`apps/api/src/modules/billing/service.ts`) (1) requires `deps.billing.verifyWebhookAuth`
+to accept the request's `Authorization` header before the body is trusted at all — this operation uses
+the custom `revenueCatWebhookAuth` security scheme, not `bearerAuth`, so `registerOperation` deliberately
+skips its normal JWT verification and the route handler checks manually; (2) persists the raw event into
+`app.billing_events` keyed by `(provider, provider_event_id)` with `ON CONFLICT ... DO NOTHING RETURNING
+id` so a duplicate delivery (RevenueCat's own at-least-once guarantee) is a silent no-op, never processed
+twice; (3) maps `app_user_id` to our UUID and marks the event `ignored` rather than erroring when it does
+not resolve to a real user (a sandbox/test event, or a user already deleted); (4) reconciles rather than
+overwrites: `reconcileEntitlement` (`packages/domain/src/billing/reconcile.ts`) does
+`ON CONFLICT (user_id, key) DO UPDATE ... WHERE app.entitlements.last_verified_at <=
+excluded.last_verified_at`, so an out-of-order or re-delivered older event can never roll back a newer,
+already-applied entitlement state — the blueprint's explicit "events may arrive twice or out of order:
+refresh/reconcile provider state rather than setting premium from arrival order." Cancellation retains
+access until period end because `normalizeRevenueCatEvent` (`packages/billing/src/revenuecat-parse.ts`)
+classifies `CANCELLATION`/`BILLING_ISSUE`/`SUBSCRIPTION_PAUSED` as `RETAINS_ACCESS_UNTIL_EXPIRY` (active
+until the provider's own `expires_at`), while only `EXPIRATION`/`REFUND` end access immediately.
+**Restore purchases is "restore → server sync → confirmed entitlement", never a local flag**:
+`POST /v1/billing/sync` (`syncBilling`) calls `fetchSubscriberEntitlements` against the provider and
+reconciles the result the same way a webhook would, then returns the server's own freshly-verified
+`Entitlements` — the only thing the Flutter client ever renders as "premium."
+
+**Free-tier quota enforcement is now entitlement-aware, replacing M4/M9's hardcoded constants.**
+`packages/domain/src/billing/limits.ts` adds `isPremiumUser` (an active, non-expired `premium` row in
+`app.entitlements`) and `dailyQuotaFor(client, userId, quota)`, which `createMealScan` and
+`sendCoachMessage` now call instead of the module-level `MEAL_SCAN_DAILY_QUOTA`/`COACH_REPLY_DAILY_QUOTA`
+constants those milestones introduced. The reserve-on-request/consume-on-success/release-on-failure
+mechanics in `app.usage_reservations` are unchanged from M4/M9 — only the limit a given user is checked
+against changes, and a free user still sees exactly the same pre-existing limits (3 meal scans, 5 coach
+replies) as before this milestone, so no M4/M9 test needed to change its expected numbers. Limits are
+still provisional engineering numbers (blueprint §13's own "proposed initial configurable" language), now
+configurable via `MEAL_SCAN_FREE_DAILY_QUOTA`/`MEAL_SCAN_PREMIUM_DAILY_QUOTA`/
+`COACH_REPLY_FREE_DAILY_QUOTA`/`COACH_REPLY_PREMIUM_DAILY_QUOTA` rather than hardcoded. `GET
+/v1/entitlements` and `GET /v1/usage` are the two new read endpoints the Flutter client uses to decide
+what to show — never a client-side guess, never a value the client can forge, consistent with the
+project-wide rule that the API derives every fact from the verified token and server state alone.
+
+**Notifications are local-device-only for V1, exactly as the blueprint states, and this milestone does
+not pretend otherwise.** `GET`/`PUT /v1/me/notification-preferences` (new operations, added to
+`openapi.yaml` and backed by a `reminder_settings` jsonb column on the pre-existing
+`app.user_preferences` table rather than a new migration) record consent (`consent_granted_at`, set only
+when the user is newly opting in) and the chosen local reminder times. There is no push token, no device
+registration endpoint, and no push-sending code anywhere in this milestone — blueprint §18 is explicit
+("No push infrastructure needed for V1") and inventing one would be exactly the kind of deferred-feature
+scope-creep AGENTS.md forbids. Flutter's `ReminderScheduler` interface is the seam where a real
+`flutter_local_notifications` (or equivalent) integration plugs in later; `NoOpReminderScheduler` is the
+only implementation shipped here, because wiring a real plugin needs native Android/iOS project changes
+this sandboxed environment has no way to verify against a real device — see the release checklist. It
+fails safe (schedules nothing) rather than guessing at a plugin API it cannot test.
+
+**Telemetry is a mock-first adapter with no real provider wired, by the same reasoning as
+notifications.** `TelemetryProvider` (`apps/mobile/lib/core/telemetry/telemetry_provider.dart`) exposes
+only a closed `TelemetryEvent` enum plus a flat `Map<String, Object?>` of properties — there is no
+"attach arbitrary payload" method, so a caller cannot pass a meal photo, chat text, an eligibility
+answer, an email or any other PII/health content through it even by mistake. It defaults to
+`enabled: false` (opt-in, not opt-out, per blueprint §18) and `MockTelemetryProvider` is the only
+implementation wired in `main.dart` for both the mock and the "real" branch, because no real
+analytics/crash SDK or project (Firebase Analytics, Sentry, etc.) is configured in this environment. A
+real provider is release-checklist work, not M10 work: the interface is the deliverable here, matching
+D-010's provider-boundary pattern even though a second concrete implementation does not exist yet.
+
+**Account deletion: a real worker job, not a soft flag, with a load-bearing three-transaction
+structure.** `requestAccountDeletion` inserts a durable `app.deletion_requests` row (already defined by
+M1); `apps/worker/src/handlers/account-delete.ts`'s `handleAccountDelete` then, in order: (1) one
+`withUserTransaction` precheck (idempotent no-op if the row is missing or already terminal); (2) one
+`withUserTransaction` that marks the row `in_progress`, cancels any queued `generation_requests`
+(`completed_at = now()` is required alongside `status = 'cancelled'` by a pre-existing check constraint),
+deletes every Storage object the user owns, and marks their `media_assets` rows deleted; (3) **with no
+transaction open at all**, calls `authAdmin.deleteUser(userId)`; (4) one final `withUserTransaction`
+marking the row `completed`. Step (3) must run outside any open transaction: an earlier single-transaction
+design hung until timeout, because `deleteUser`'s own `DELETE FROM auth.users` (on a separate pooled
+connection) cascades through foreign keys into rows (e.g. `media_assets`) the still-open transaction had
+already written but not committed — real lock contention, not a test artifact, and the same risk exists
+in production since the API/worker and the Supabase Admin API ultimately share one Postgres instance.
+This is why the handler's doc comment calls the three-transaction split load-bearing. The relay dispatch
+pattern for `export_requests`/`deletion_requests` (new queue-tracking columns in
+`20261001001400_m10_billing_notifications_account.sql`, plus `worker_relay_select`/`worker_relay_update`
+RLS policies and a column-guard trigger) exactly mirrors the pre-existing `generation_requests` pattern
+from M2 rather than inventing a new one.
+
+**Account export builds a manifest from the same domain tables every other feature already queries,
+never a second copy of nutrition/exercise facts.** `handleAccountExport`'s `buildManifest` runs sequential
+(not concurrent — a single transaction connection can only run one query at a time) reads across
+profile, preferences, goals, diet/workout plans and logs, weight logs and a progress-photo manifest
+(URLs/paths, not re-hosted bytes), excluding secrets and provider internals per blueprint §14, and writes
+the JSON via the media storage adapter's new `writeObject` method — the one place in the codebase a
+server-generated object is written directly rather than through the client-upload-url flow, because
+there is no client upload to verify.
+
+**Release gate (open, the final one — see `docs/release-checklist.md` for the full, consolidated
+list).** A real RevenueCat project/webhook secret/API key; a real analytics/crash provider if the product
+wants more than the opt-in-but-unwired telemetry interface shipped here; a real
+`flutter_local_notifications` integration; a licensed nutrition/exercise catalog and a clinical/safety
+review of M9's `checkSafety` (carried from D-025–D-031); Android/iOS builds and app-store accounts; a
+production backup/restore drill that respects deletion tombstones (blueprint §14). This is the last V1
+milestone — there is no M11 to carry open items into; `docs/release-checklist.md` is where they now live.

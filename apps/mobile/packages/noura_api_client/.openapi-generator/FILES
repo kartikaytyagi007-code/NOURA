@@ -135,6 +135,9 @@ lib/src/model/next_meal_action_type.dart
 lib/src/model/next_meal_option.dart
 lib/src/model/next_meal_response.dart
 lib/src/model/next_meal_source.dart
+lib/src/model/notification_preferences.dart
+lib/src/model/notification_preferences_input.dart
+lib/src/model/notification_preferences_response.dart
 lib/src/model/number_range.dart
 lib/src/model/nutrient_totals.dart
 lib/src/model/nutrients.dart

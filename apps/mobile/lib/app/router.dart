@@ -24,7 +24,10 @@ import '../features/progress/progress_screen.dart';
 import '../features/progress/weight_history_screen.dart';
 import '../features/session/session_error_screen.dart';
 import '../features/session/splash_screen.dart';
+import '../features/settings/account_data_screen.dart';
+import '../features/settings/billing_screen.dart';
 import '../features/settings/profile_settings_pages.dart';
+import '../features/settings/reminders_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/workouts/workout_screen.dart';
 import 'route_guard.dart';
@@ -78,6 +81,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: 'preferences', builder: (_, _) => const PreferencesEditPage()),
           GoRoute(path: 'training', builder: (_, _) => const TrainingEditPage()),
           GoRoute(path: 'eligibility', builder: (_, _) => const EligibilityEditPage()),
+          GoRoute(path: 'reminders', builder: (_, _) => const RemindersScreen()),
+          GoRoute(path: 'billing', builder: (_, _) => const BillingScreen()),
+          GoRoute(path: 'account-data', builder: (_, _) => const AccountDataScreen()),
         ],
       ),
       StatefulShellRoute.indexedStack(

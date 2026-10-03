@@ -32,6 +32,10 @@ const schema = z
     AI_API_KEY: z.string().min(1).optional(),
     AI_MODEL_ID: z.string().min(1).optional(),
 
+    // Account deletion needs to remove the auth identity itself (blueprint §14); mock is dev/test
+    // only, same fail-closed pattern as AI_PROVIDER/BILLING_PROVIDER (D-010).
+    AUTH_ADMIN_PROVIDER: z.enum(['mock', 'supabase']).optional(),
+
     SUPABASE_URL: z.url().optional(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
     MEDIA_STORAGE_DRIVER: z.enum(['local', 'supabase']).optional(),
@@ -66,6 +70,13 @@ const schema = z
         message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for meal-scan storage',
       });
     }
+    if (!env.AUTH_ADMIN_PROVIDER || env.AUTH_ADMIN_PROVIDER === 'mock') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AUTH_ADMIN_PROVIDER'],
+        message: `a real auth-admin provider is required when APP_ENV=${env.APP_ENV}`,
+      });
+    }
   });
 
 export interface WorkerConfig {
@@ -80,6 +91,7 @@ export interface WorkerConfig {
   concurrency: number;
   relayIntervalMs: number;
   ai: { provider: 'mock' | 'gemini'; apiKey?: string | undefined; modelId?: string | undefined };
+  authAdmin: { provider: 'mock' | 'supabase' };
   media: {
     driver: 'local' | 'supabase' | undefined;
     supabaseUrl: string;
@@ -117,6 +129,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     concurrency: e.WORKER_CONCURRENCY,
     relayIntervalMs: e.WORKER_RELAY_INTERVAL_MS,
     ai: { provider: e.AI_PROVIDER ?? 'mock', apiKey: e.AI_API_KEY, modelId: e.AI_MODEL_ID },
+    authAdmin: { provider: e.AUTH_ADMIN_PROVIDER ?? 'mock' },
     media: {
       driver: e.MEDIA_STORAGE_DRIVER,
       supabaseUrl: e.SUPABASE_URL ?? 'https://invalid.local',

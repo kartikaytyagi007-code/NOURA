@@ -26,7 +26,7 @@ describe('OpenAPI contract structure', () => {
     }
   });
 
-  it('implements exactly the M1-M9 operations, each tagged with its milestone', () => {
+  it('implements exactly the M1-M10 operations, each tagged with its milestone', () => {
     const implemented = Object.fromEntries(
       ops.filter((o) => o.status === 'implemented').map((o) => [o.operationId, o.milestone]),
     );
@@ -79,6 +79,15 @@ describe('OpenAPI contract structure', () => {
       sendCoachMessage: 'M9',
       applyActionProposal: 'M9',
       cancelActionProposal: 'M9',
+      getNotificationPreferences: 'M10',
+      putNotificationPreferences: 'M10',
+      getEntitlements: 'M10',
+      getUsage: 'M10',
+      syncBilling: 'M10',
+      receiveRevenueCatWebhook: 'M10',
+      requestAccountExport: 'M10',
+      getAccountExport: 'M10',
+      deleteAccount: 'M10',
     });
   });
 
@@ -88,6 +97,11 @@ describe('OpenAPI contract structure', () => {
       'PATCH /me',
       'PUT /me/preferences',
       'PUT /me/training-preferences',
+      // Local-reminder consent/preferences (blueprint §18 "User reminders initially use local device
+      // notifications after opt-in"); not in the blueprint's §11 table verbatim, but the same
+      // GET/PUT-preference shape as the other /me/* resources above (D-03x, M10).
+      'GET /me/notification-preferences',
+      'PUT /me/notification-preferences',
       'POST /onboarding/complete',
       'GET /targets',
       'GET /home',

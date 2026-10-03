@@ -60,7 +60,7 @@ export function registerCoachRoutes(app: FastifyInstance, deps: AppDeps): void {
         key: idempotencyKeyFrom(request),
         body: { id, ...body },
       },
-      (client) => sendCoachMessage(client, userId, id, body),
+      (client) => sendCoachMessage(client, userId, id, body, deps.config.quotas.coachReply),
     );
     reply.code(202);
     return { data, meta: { request_id: request.id } };

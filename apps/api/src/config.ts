@@ -52,6 +52,14 @@ const schema = z
     DEV_STORAGE_DIR: z.string().min(1).optional(),
     DEV_STORAGE_SIGNING_SECRET: z.string().min(1).optional(),
     DEV_STORAGE_BASE_URL: z.string().min(1).optional(),
+
+    // Server-controlled free/premium daily quotas (blueprint §13's own proposed figures by default;
+    // a release reviewer can override any of them without a code change). See
+    // packages/domain/src/billing/limits.ts.
+    MEAL_SCAN_FREE_DAILY_QUOTA: z.coerce.number().int().min(0).default(3),
+    MEAL_SCAN_PREMIUM_DAILY_QUOTA: z.coerce.number().int().min(0).default(20),
+    COACH_REPLY_FREE_DAILY_QUOTA: z.coerce.number().int().min(0).default(5),
+    COACH_REPLY_PREMIUM_DAILY_QUOTA: z.coerce.number().int().min(0).default(20),
   })
   .superRefine((env, ctx) => {
     const deployed = env.APP_ENV === 'staging' || env.APP_ENV === 'production';
@@ -105,7 +113,15 @@ export interface ApiConfig {
   pgBossSchema: string;
   auth: { issuer: string; audience: string; jwksUrl: string };
   ai: { provider: 'mock' | 'gemini'; apiKey?: string | undefined; modelId?: string | undefined };
-  billing: { provider: 'mock' | 'revenuecat' };
+  billing: {
+    provider: 'mock' | 'revenuecat';
+    secretApiKey?: string | undefined;
+    webhookAuthorization?: string | undefined;
+  };
+  quotas: {
+    mealScan: { free: number; premium: number };
+    coachReply: { free: number; premium: number };
+  };
   media: {
     driver: 'local' | 'supabase' | undefined;
     supabaseUrl: string;
@@ -179,7 +195,18 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     },
     // Development defaults to explicit mocks; deployed environments were validated above.
     ai: { provider: e.AI_PROVIDER ?? 'mock', apiKey: e.AI_API_KEY, modelId: e.AI_MODEL_ID },
-    billing: { provider: e.BILLING_PROVIDER ?? 'mock' },
+    billing: {
+      provider: e.BILLING_PROVIDER ?? 'mock',
+      secretApiKey: e.REVENUECAT_SECRET_API_KEY,
+      webhookAuthorization: e.REVENUECAT_WEBHOOK_AUTH,
+    },
+    quotas: {
+      mealScan: { free: e.MEAL_SCAN_FREE_DAILY_QUOTA, premium: e.MEAL_SCAN_PREMIUM_DAILY_QUOTA },
+      coachReply: {
+        free: e.COACH_REPLY_FREE_DAILY_QUOTA,
+        premium: e.COACH_REPLY_PREMIUM_DAILY_QUOTA,
+      },
+    },
     media: {
       driver: e.MEDIA_STORAGE_DRIVER,
       supabaseUrl: e.SUPABASE_URL,

@@ -190,6 +190,50 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '409': { $ref: '#/components/responses/RevisionConflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/me/notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      summary: Local-reminder consent and preferences.
+      description: |
+        Backed by `app.user_preferences.reminder_settings` (an M1-provisioned jsonb column, unused
+        until this milestone). Reminders are local device notifications only after explicit opt-in
+        (blueprint §18: "No push infrastructure needed for V1") — there is no server-held push token.
+      tags: [profile]
+      x-noura-milestone: M10
+      x-noura-status: implemented
+      responses:
+        '200':
+          description: Current notification preferences.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPreferencesResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    put:
+      operationId: putNotificationPreferences
+      summary: Replace local-reminder consent and preferences.
+      description: |
+        Whole-object replacement, same revision contract as the other `/v1/me/*` preference
+        resources. Setting `consent_granted_at` happens only when the client sends a non-null value
+        (an explicit opt-in action), never implicitly.
+      tags: [profile]
+      x-noura-milestone: M10
+      x-noura-status: implemented
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationPreferencesInput' }
+      responses:
+        '200':
+          description: Saved notification preferences.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPreferencesResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /v1/onboarding/complete:
     post:
       operationId: completeOnboarding
@@ -1135,7 +1179,7 @@ paths:
       summary: Server-side entitlements.
       tags: [billing]
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       responses:
         '200':
           description: Server-side entitlement truth.
@@ -1149,7 +1193,7 @@ paths:
       summary: Current usage and limits.
       tags: [billing]
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       responses:
         '200':
           description: Current usage and limits.
@@ -1163,7 +1207,7 @@ paths:
       tags: [billing]
       summary: Refresh entitlements from the provider. Never accepts a client premium flag.
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -1182,7 +1226,7 @@ paths:
       security:
         - revenueCatWebhookAuth: []
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       requestBody:
         required: true
         content:
@@ -1203,7 +1247,7 @@ paths:
       summary: Request a data export.
       tags: [account]
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -1220,7 +1264,7 @@ paths:
       summary: Export status and download link.
       tags: [account]
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
       responses:
@@ -1237,7 +1281,7 @@ paths:
       tags: [account]
       summary: Requires a recently issued access token (recent authentication).
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -1844,6 +1888,47 @@ components:
       required: [data, meta]
       properties:
         data: { $ref: '#/components/schemas/TrainingPreferences' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    NotificationPreferences:
+      type: object
+      additionalProperties: false
+      required:
+        [revision, meal_reminders_enabled, workout_reminders_enabled, meal_reminder_time, workout_reminder_time, consent_granted_at]
+      properties:
+        revision: { type: integer, minimum: 0, description: 'Preferences revision; 0 when none exist yet.' }
+        meal_reminders_enabled: { type: boolean }
+        workout_reminders_enabled: { type: boolean }
+        meal_reminder_time:
+          type: string
+          nullable: true
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: Local 24-hour HH:MM, scheduled on the device in the profile timezone.
+        workout_reminder_time:
+          type: string
+          nullable: true
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+        consent_granted_at: { type: string, format: date-time, nullable: true }
+    NotificationPreferencesInput:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, meal_reminders_enabled, workout_reminders_enabled]
+      properties:
+        expected_revision: { type: integer, minimum: 0 }
+        meal_reminders_enabled: { type: boolean }
+        workout_reminders_enabled: { type: boolean }
+        meal_reminder_time: { type: string, nullable: true, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+        workout_reminder_time: { type: string, nullable: true, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+        consent_granted_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Send a timestamp only when the user just opted in; omit/null otherwise.
+    NotificationPreferencesResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/NotificationPreferences' }
         meta: { $ref: '#/components/schemas/Meta' }
     ConsentType:
       type: string

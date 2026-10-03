@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createAiProvider, type AiProvider } from '@noura/ai';
+import { createAuthAdminProvider, type AuthAdminProvider } from '@noura/billing';
 import {
   DEAD_LETTER_QUEUE,
   QUEUE_POLICIES,
@@ -14,17 +15,20 @@ import pg from 'pg';
 import { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { WorkerConfig } from './config.js';
+import { handleAccountDelete } from './handlers/account-delete.js';
+import { handleAccountExport } from './handlers/account-export.js';
 import { handleCoachReply } from './handlers/coach-reply.js';
 import { handleDietPlanGenerate } from './handlers/diet-plan-generate.js';
 import { handleMealScanAnalyze } from './handlers/meal-scan-analyze.js';
 import { handleSystemPing } from './handlers/system-ping.js';
 import { handleWorkoutPlanGenerate } from './handlers/workout-plan-generate.js';
-import { relayGenerationRequests, startRelayLoop } from './relay.js';
+import { relayAccountRequests, relayGenerationRequests, startRelayLoop } from './relay.js';
 
 export interface WorkerRuntime {
   boss: PgBoss;
   ai: AiProvider;
   media: MediaStorage;
+  authAdmin: AuthAdminProvider;
   healthServer: Server;
   healthPort: () => number;
   stop: () => Promise<void>;
@@ -102,6 +106,24 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
   });
   jobPool.on('error', (error) => log.error({ err: error }, 'job pool error'));
 
+  const authAdmin = createAuthAdminProvider({
+    appEnv: config.appEnv,
+    provider: config.authAdmin.provider,
+    supabaseUrl: config.media.supabaseUrl,
+    serviceRoleKey: config.media.serviceRoleKey,
+    // Dev/test only (see MockAuthAdminDeps): deletes the row directly on jobPool's own unrestricted
+    // base connection (the plain-Postgres shim's `auth.users` has no Supabase protections — see
+    // supabase/tests/support/supabase_shim.sql), so the deletion handler can be exercised end to end
+    // against a real database without a real Supabase project.
+    mockDeps:
+      config.authAdmin.provider === 'mock'
+        ? {
+            deleteAuthUser: async (userId) =>
+              void (await jobPool.query('delete from auth.users where id = $1', [userId])),
+          }
+        : undefined,
+  });
+
   await boss.work<QueuePayloads['diet-plan.generate']>(
     QUEUES.dietPlanGenerate,
     { batchSize: 1, localConcurrency: config.concurrency },
@@ -122,6 +144,16 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
     { batchSize: 1, localConcurrency: config.concurrency },
     (jobs) => handleCoachReply(jobs, jobPool, ai, log),
   );
+  await boss.work<QueuePayloads['account.export']>(
+    QUEUES.accountExport,
+    { batchSize: 1, localConcurrency: config.concurrency },
+    (jobs) => handleAccountExport(jobs, jobPool, media, log),
+  );
+  await boss.work<QueuePayloads['account.delete']>(
+    QUEUES.accountDelete,
+    { batchSize: 1, localConcurrency: config.concurrency },
+    (jobs) => handleAccountDelete(jobs, jobPool, media, authAdmin, log),
+  );
   ready = true;
 
   // The relay uses its own small pool so it can assume the restricted noura_worker role.
@@ -132,7 +164,14 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
   });
   relayPool.on('error', (error) => log.error({ err: error }, 'relay pool error'));
   const relay = startRelayLoop(
-    () => relayGenerationRequests(relayPool, boss, log),
+    async () => {
+      const generation = await relayGenerationRequests(relayPool, boss, log);
+      const account = await relayAccountRequests(relayPool, boss, log);
+      return {
+        dispatched: generation.dispatched + account.dispatched,
+        skipped: generation.skipped + account.skipped,
+      };
+    },
     config.relayIntervalMs,
     log,
   );
@@ -181,6 +220,7 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
     boss,
     ai,
     media,
+    authAdmin,
     healthServer,
     healthPort: () => (healthServer.address() as AddressInfo).port,
     stop: async () => {

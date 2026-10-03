@@ -11,13 +11,19 @@ abstract class _$MeCWProxy {
 
   Me profile(Profile profile);
 
+  Me goal(Goal? goal);
+
   Me preferences(Preferences? preferences);
 
   Me trainingPreferences(TrainingPreferences? trainingPreferences);
 
   Me eligibilityStatus(EligibilityStatus? eligibilityStatus);
 
+  Me screening(ScreeningAnswers? screening);
+
   Me onboarding(Onboarding onboarding);
+
+  Me planning(Planning? planning);
 
   /// This function **does support** nullification of nullable fields. All `null` values passed to `non-nullable` fields will be ignored. You can also use `Me(...).copyWith.fieldName(...)` to override fields one at a time with nullification support.
   ///
@@ -28,10 +34,13 @@ abstract class _$MeCWProxy {
   Me call({
     String userId,
     Profile profile,
+    Goal? goal,
     Preferences? preferences,
     TrainingPreferences? trainingPreferences,
     EligibilityStatus? eligibilityStatus,
+    ScreeningAnswers? screening,
     Onboarding onboarding,
+    Planning? planning,
   });
 }
 
@@ -48,6 +57,9 @@ class _$MeCWProxyImpl implements _$MeCWProxy {
   Me profile(Profile profile) => this(profile: profile);
 
   @override
+  Me goal(Goal? goal) => this(goal: goal);
+
+  @override
   Me preferences(Preferences? preferences) => this(preferences: preferences);
 
   @override
@@ -59,7 +71,13 @@ class _$MeCWProxyImpl implements _$MeCWProxy {
       this(eligibilityStatus: eligibilityStatus);
 
   @override
+  Me screening(ScreeningAnswers? screening) => this(screening: screening);
+
+  @override
   Me onboarding(Onboarding onboarding) => this(onboarding: onboarding);
+
+  @override
+  Me planning(Planning? planning) => this(planning: planning);
 
   @override
   /// This function **does support** nullification of nullable fields. All `null` values passed to `non-nullable` fields will be ignored. You can also use `Me(...).copyWith.fieldName(...)` to override fields one at a time with nullification support.
@@ -71,10 +89,13 @@ class _$MeCWProxyImpl implements _$MeCWProxy {
   Me call({
     Object? userId = const $CopyWithPlaceholder(),
     Object? profile = const $CopyWithPlaceholder(),
+    Object? goal = const $CopyWithPlaceholder(),
     Object? preferences = const $CopyWithPlaceholder(),
     Object? trainingPreferences = const $CopyWithPlaceholder(),
     Object? eligibilityStatus = const $CopyWithPlaceholder(),
+    Object? screening = const $CopyWithPlaceholder(),
     Object? onboarding = const $CopyWithPlaceholder(),
+    Object? planning = const $CopyWithPlaceholder(),
   }) {
     return Me(
       userId: userId == const $CopyWithPlaceholder()
@@ -85,6 +106,10 @@ class _$MeCWProxyImpl implements _$MeCWProxy {
           ? _value.profile
           // ignore: cast_nullable_to_non_nullable
           : profile as Profile,
+      goal: goal == const $CopyWithPlaceholder()
+          ? _value.goal
+          // ignore: cast_nullable_to_non_nullable
+          : goal as Goal?,
       preferences: preferences == const $CopyWithPlaceholder()
           ? _value.preferences
           // ignore: cast_nullable_to_non_nullable
@@ -97,10 +122,18 @@ class _$MeCWProxyImpl implements _$MeCWProxy {
           ? _value.eligibilityStatus
           // ignore: cast_nullable_to_non_nullable
           : eligibilityStatus as EligibilityStatus?,
+      screening: screening == const $CopyWithPlaceholder()
+          ? _value.screening
+          // ignore: cast_nullable_to_non_nullable
+          : screening as ScreeningAnswers?,
       onboarding: onboarding == const $CopyWithPlaceholder()
           ? _value.onboarding
           // ignore: cast_nullable_to_non_nullable
           : onboarding as Onboarding,
+      planning: planning == const $CopyWithPlaceholder()
+          ? _value.planning
+          // ignore: cast_nullable_to_non_nullable
+          : planning as Planning?,
     );
   }
 }
@@ -124,10 +157,13 @@ Me _$MeFromJson(Map<String, dynamic> json) => $checkedCreate(
       requiredKeys: const [
         'user_id',
         'profile',
+        'goal',
         'preferences',
         'training_preferences',
         'eligibility_status',
+        'screening',
         'onboarding',
+        'planning',
       ],
     );
     final val = Me(
@@ -135,6 +171,10 @@ Me _$MeFromJson(Map<String, dynamic> json) => $checkedCreate(
       profile: $checkedConvert(
         'profile',
         (v) => Profile.fromJson(v as Map<String, dynamic>),
+      ),
+      goal: $checkedConvert(
+        'goal',
+        (v) => v == null ? null : Goal.fromJson(v as Map<String, dynamic>),
       ),
       preferences: $checkedConvert(
         'preferences',
@@ -151,9 +191,19 @@ Me _$MeFromJson(Map<String, dynamic> json) => $checkedCreate(
         'eligibility_status',
         (v) => $enumDecodeNullable(_$EligibilityStatusEnumMap, v),
       ),
+      screening: $checkedConvert(
+        'screening',
+        (v) => v == null
+            ? null
+            : ScreeningAnswers.fromJson(v as Map<String, dynamic>),
+      ),
       onboarding: $checkedConvert(
         'onboarding',
         (v) => Onboarding.fromJson(v as Map<String, dynamic>),
+      ),
+      planning: $checkedConvert(
+        'planning',
+        (v) => v == null ? null : Planning.fromJson(v as Map<String, dynamic>),
       ),
     );
     return val;
@@ -168,10 +218,13 @@ Me _$MeFromJson(Map<String, dynamic> json) => $checkedCreate(
 Map<String, dynamic> _$MeToJson(Me instance) => <String, dynamic>{
   'user_id': instance.userId,
   'profile': instance.profile.toJson(),
+  'goal': instance.goal?.toJson(),
   'preferences': instance.preferences?.toJson(),
   'training_preferences': instance.trainingPreferences?.toJson(),
   'eligibility_status': _$EligibilityStatusEnumMap[instance.eligibilityStatus],
+  'screening': instance.screening?.toJson(),
   'onboarding': instance.onboarding.toJson(),
+  'planning': instance.planning?.toJson(),
 };
 
 const _$EligibilityStatusEnumMap = {

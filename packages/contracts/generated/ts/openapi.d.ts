@@ -55,7 +55,15 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
-    /** Save a partial profile / onboarding step. */
+    /**
+     * Save a partial profile / goal / screening / onboarding step.
+     * @description Merges the supplied fields into the profile and bumps the profile revision by one.
+     *     `expected_revision` must equal the current revision (409 otherwise). The server validates every
+     *     field, recomputes eligibility when age or screening change, and, once onboarding is completed,
+     *     refreshes the target snapshot when a target-relevant field changed. `onboarding_step` may only
+     *     be set while onboarding is not completed. Replays of the same `Idempotency-Key` return the
+     *     original response.
+     */
     patch: operations['patchMe'];
     trace?: never;
   };
@@ -67,7 +75,11 @@ export interface paths {
       cookie?: never;
     };
     get?: never;
-    /** Replace diet preferences. */
+    /**
+     * Replace diet preferences.
+     * @description Whole-object replacement. `expected_revision` is the preferences revision from `GET /v1/me`
+     *     (`0` when no preferences exist yet). The first save creates revision 1.
+     */
     put: operations['putPreferences'];
     post?: never;
     delete?: never;
@@ -84,8 +96,40 @@ export interface paths {
       cookie?: never;
     };
     get?: never;
-    /** Replace training preferences. */
+    /**
+     * Replace training preferences.
+     * @description Whole-object replacement. `expected_revision` is the training-preferences revision from
+     *     `GET /v1/me` (`0` when none exist yet). The first save creates revision 1.
+     */
     put: operations['putTrainingPreferences'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/me/notification-preferences': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Local-reminder consent and preferences.
+     * @description Backed by `app.user_preferences.reminder_settings` (an M1-provisioned jsonb column, unused
+     *     until this milestone). Reminders are local device notifications only after explicit opt-in
+     *     (blueprint §18: "No push infrastructure needed for V1") — there is no server-held push token.
+     */
+    get: operations['getNotificationPreferences'];
+    /**
+     * Replace local-reminder consent and preferences.
+     * @description Whole-object replacement, same revision contract as the other `/v1/me/*` preference
+     *     resources. Setting `consent_granted_at` happens only when the client sends a non-null value
+     *     (an explicit opt-in action), never implicitly.
+     */
+    put: operations['putNotificationPreferences'];
     post?: never;
     delete?: never;
     options?: never;
@@ -102,7 +146,15 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Transactionally completes onboarding, creates target snapshot and plan jobs. */
+    /**
+     * Transactionally completes onboarding, creates the target snapshot and the plan request.
+     * @description In one transaction: verifies the profile revision and that every onboarding input is present,
+     *     records consents, determines eligibility, completes onboarding, and (only for eligible users
+     *     when an allowed target policy exists) writes a target snapshot and one durable generation
+     *     request. The request is relayed to the job queue by the worker, so a queue or generation
+     *     failure never loses profile data. Replays of the same `Idempotency-Key` return the original
+     *     response; a second completion is rejected.
+     */
     post: operations['completeOnboarding'];
     delete?: never;
     options?: never;
@@ -425,10 +477,43 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Three grounded next-meal options. */
+    /**
+     * The next-meal recommendation, with reasons and alternatives.
+     * @description Determines whichever of today's slots (breakfast/lunch/dinner/snack) is next by time of day
+     *     and not yet logged, or uses `slot` as an explicit override (e.g. "what should I have for
+     *     dinner"). Grounded entirely in the caller's active diet plan, today's meal log and the
+     *     eligible catalog (blueprint §9, §16 M6); never an AI-invented suggestion. `limited_context`
+     *     is true whenever today's logged intake is empty or has incomplete nutrition coverage, so a
+     *     gap-based reason is never implied from data that cannot support it.
+     */
     get: operations['getNextMeal'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/recommendations/next-meal/actions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Add, swap or dismiss a next-meal recommendation.
+     * @description `add` creates a new plan slot from the recommended recipe when the date/slot has no planned
+     *     meal yet (requires an active plan). `swap` replaces an existing planned slot with the
+     *     recommended candidate, by calling the same `replacePlanMeal` domain logic the diet-plan swap
+     *     screen uses (blueprint §9) — never a separate, duplicated code path. `dismiss` sticks for that
+     *     date/slot (D-028) so a later GET honestly reports it was dismissed instead of recomputing the
+     *     same suggestion. Safe to retry: identical `Idempotency-Key` + body replays the same result.
+     */
+    post: operations['nextMealAction'];
     delete?: never;
     options?: never;
     head?: never;
@@ -442,7 +527,14 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Seven-day nutrition patterns. */
+    /**
+     * Seven-day nutrition patterns.
+     * @description Daily and seven-day nutrition-pattern summaries from recorded meals (blueprint §10, §16 M6).
+     *     A protein/fibre gap is identified only when the underlying data supports it: a day with no
+     *     logs or incomplete nutrition coverage is excluded from the seven-day average and named in
+     *     `excluded_days`/`coverage_uncertain` rather than silently counted as zero, and a gap is only
+     *     ever reported once enough usable days exist to support the conclusion.
+     */
     get: operations['getInsights'];
     put?: never;
     post?: never;
@@ -653,6 +745,23 @@ export interface paths {
     /** Create a coach thread. */
     post: operations['createCoachThread'];
     delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/v1/coach/threads/{id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Delete an owned coach thread and its messages/proposals (D-031; user-initiated deletion). */
+    delete: operations['deleteCoachThread'];
     options?: never;
     head?: never;
     patch?: never;
@@ -962,6 +1071,13 @@ export interface components {
      * @enum {string}
      */
     CalculationSex: 'female' | 'male';
+    /**
+     * @description Input form of CalculationSex. `declined` stores "no value" (the profile then reads null) and
+     *     yields an energy range instead of a single target. It exists so a client can clear a
+     *     previously given value explicitly; JSON null is not used in requests.
+     * @enum {string}
+     */
+    CalculationSexInput: 'female' | 'male' | 'declined';
     /** @enum {string} */
     ActivityBand: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
     /** @enum {string} */
@@ -989,6 +1105,7 @@ export interface components {
       age_years: number | null;
       calculation_sex: (string & components['schemas']['CalculationSex']) | null;
       height_cm: number | null;
+      weight_kg: number | null;
       activity_band: (string & components['schemas']['ActivityBand']) | null;
       /** @description IANA timezone. */
       timezone: string;
@@ -1001,9 +1118,12 @@ export interface components {
     };
     Preferences: {
       diet_type: (string & components['schemas']['DietType']) | null;
+      /** @description Allergy tags (AllergyTag). Clients ignore values they do not know. */
       allergy_ids: string[];
+      /** @description Food exclusion tags (ExclusionTag). Clients ignore values they do not know. */
       exclusion_ids: string[];
       dislikes: string[];
+      /** @description Cuisine tags (CuisineTag). Clients ignore values they do not know. */
       cuisines: string[];
       budget_band: (string & components['schemas']['BudgetBand']) | null;
       cooking_time: (string & components['schemas']['CookingTime']) | null;
@@ -1013,10 +1133,12 @@ export interface components {
     TrainingPreferences: {
       experience: (string & components['schemas']['ExperienceLevel']) | null;
       location: (string & components['schemas']['TrainingLocation']) | null;
+      /** @description Equipment tags (EquipmentTag). Clients ignore values they do not know. */
       equipment_ids: string[];
       weekdays: number[];
       days_per_week: number | null;
       duration_minutes: number | null;
+      /** @description Limitation tags (LimitationTag). Clients ignore values they do not know. */
       limitation_tags: string[];
       revision: number;
     };
@@ -1028,33 +1150,123 @@ export interface components {
      *         "age_years": null,
      *         "calculation_sex": null,
      *         "height_cm": null,
+     *         "weight_kg": null,
      *         "activity_band": null,
      *         "timezone": "UTC",
      *         "unit_system": "metric",
      *         "revision": 1
      *       },
+     *       "goal": null,
      *       "preferences": null,
      *       "training_preferences": null,
      *       "eligibility_status": null,
+     *       "screening": null,
      *       "onboarding": {
      *         "status": "not_started",
      *         "step": null
-     *       }
+     *       },
+     *       "planning": null
      *     }
      */
     Me: {
       /** Format: uuid */
       user_id: string;
       profile: components['schemas']['Profile'];
+      goal: components['schemas']['Goal'] | null;
       preferences: components['schemas']['Preferences'] | null;
       training_preferences: components['schemas']['TrainingPreferences'] | null;
       eligibility_status: (string & components['schemas']['EligibilityStatus']) | null;
+      /** @description The stored screening answers, or null until the user has answered. */
+      screening: components['schemas']['ScreeningAnswers'] | null;
       onboarding: components['schemas']['Onboarding'];
+      /** @description Null until onboarding is completed. */
+      planning: components['schemas']['Planning'] | null;
     };
     MeResponse: {
       data: components['schemas']['Me'];
       meta: components['schemas']['Meta'];
     };
+    Goal: {
+      goal_type: components['schemas']['GoalType'];
+      target_weight_kg: number | null;
+    };
+    /** @enum {string} */
+    ScreeningAnswer: 'yes' | 'no' | 'prefer_not_to_say';
+    /**
+     * @description Minimal eligibility screening (blueprint §1). Only these three answers are stored. A "yes" or a
+     *     declined answer means automated plans are not generated; tracking features stay available.
+     */
+    ScreeningAnswers: {
+      pregnancy_or_breastfeeding: components['schemas']['ScreeningAnswer'];
+      eating_disorder_concern: components['schemas']['ScreeningAnswer'];
+      medical_diet_condition: components['schemas']['ScreeningAnswer'];
+    };
+    /**
+     * @description requested: a generation request exists (poll `GET /v1/jobs/{id}`).
+     *     unavailable_tracking_only / unavailable_needs_review: eligibility excludes automated plans.
+     *     unavailable_policy: eligible, but no approved target policy is configured for this environment.
+     * @enum {string}
+     */
+    PlanningStatus:
+      'requested' | 'unavailable_tracking_only' | 'unavailable_needs_review' | 'unavailable_policy';
+    Planning: {
+      status: components['schemas']['PlanningStatus'];
+      /**
+       * Format: uuid
+       * @description The initial diet-plan generation request, when status is requested.
+       */
+      job_id: string | null;
+    };
+    /**
+     * @description Provisional vocabulary (docs/decisions.md D-020). Not a medical allergy list.
+     * @enum {string}
+     */
+    AllergyTag:
+      'gluten' | 'crustacean' | 'milk' | 'egg' | 'fish' | 'peanut' | 'tree_nut' | 'soy' | 'sesame';
+    /**
+     * @description Provisional vocabulary (D-020). Foods the user does not eat for non-allergy reasons.
+     * @enum {string}
+     */
+    ExclusionTag:
+      | 'beef'
+      | 'pork'
+      | 'mutton'
+      | 'chicken'
+      | 'seafood'
+      | 'onion_garlic'
+      | 'root_vegetables'
+      | 'mushroom'
+      | 'alcohol';
+    /**
+     * @description Provisional vocabulary (D-020).
+     * @enum {string}
+     */
+    CuisineTag:
+      | 'north_indian'
+      | 'south_indian'
+      | 'east_indian'
+      | 'west_indian'
+      | 'indo_chinese'
+      | 'continental';
+    /**
+     * @description Provisional vocabulary (D-020); refined with the exercise catalog in M7.
+     * @enum {string}
+     */
+    EquipmentTag:
+      | 'bodyweight'
+      | 'dumbbells'
+      | 'barbell'
+      | 'kettlebell'
+      | 'resistance_bands'
+      | 'bench'
+      | 'pull_up_bar'
+      | 'machines';
+    /**
+     * @description Provisional vocabulary (D-020). Areas where exercises should be gentler; not a medical assessment.
+     * @enum {string}
+     */
+    LimitationTag:
+      'knee' | 'lower_back' | 'shoulder' | 'neck' | 'wrist_elbow' | 'hip' | 'ankle_foot';
     GoalInput: {
       goal_type: components['schemas']['GoalType'];
       target_weight_kg?: number | null;
@@ -1063,22 +1275,24 @@ export interface components {
       expected_revision: number;
       display_name?: string;
       age_years?: number;
-      calculation_sex?: (string & components['schemas']['CalculationSex']) | null;
+      calculation_sex?: components['schemas']['CalculationSexInput'];
       height_cm?: number;
       weight_kg?: number;
       activity_band?: components['schemas']['ActivityBand'];
       timezone?: string;
       unit_system?: components['schemas']['UnitSystem'];
       primary_goal?: components['schemas']['GoalInput'];
+      screening?: components['schemas']['ScreeningAnswers'];
       onboarding_step?: components['schemas']['OnboardingStep'];
     };
     PreferencesInput: {
+      /** @description Current preferences revision; 0 when none exist yet. */
       expected_revision: number;
       diet_type: components['schemas']['DietType'];
-      allergy_ids: string[];
-      exclusion_ids: string[];
+      allergy_ids: components['schemas']['AllergyTag'][];
+      exclusion_ids: components['schemas']['ExclusionTag'][];
       dislikes?: string[];
-      cuisines: string[];
+      cuisines: components['schemas']['CuisineTag'][];
       budget_band: components['schemas']['BudgetBand'];
       cooking_time: components['schemas']['CookingTime'];
       meals_per_day: number;
@@ -1088,17 +1302,45 @@ export interface components {
       meta: components['schemas']['Meta'];
     };
     TrainingPreferencesInput: {
+      /** @description Current training-preferences revision; 0 when none exist yet. */
       expected_revision: number;
       experience: components['schemas']['ExperienceLevel'];
       location: components['schemas']['TrainingLocation'];
-      equipment_ids: string[];
+      equipment_ids: components['schemas']['EquipmentTag'][];
       weekdays: number[];
       days_per_week: number;
       duration_minutes: number;
-      limitation_tags: string[];
+      limitation_tags: components['schemas']['LimitationTag'][];
     };
     TrainingPreferencesResponse: {
       data: components['schemas']['TrainingPreferences'];
+      meta: components['schemas']['Meta'];
+    };
+    NotificationPreferences: {
+      /** @description Preferences revision; 0 when none exist yet. */
+      revision: number;
+      meal_reminders_enabled: boolean;
+      workout_reminders_enabled: boolean;
+      /** @description Local 24-hour HH:MM, scheduled on the device in the profile timezone. */
+      meal_reminder_time: string | null;
+      workout_reminder_time: string | null;
+      /** Format: date-time */
+      consent_granted_at: string | null;
+    };
+    NotificationPreferencesInput: {
+      expected_revision: number;
+      meal_reminders_enabled: boolean;
+      workout_reminders_enabled: boolean;
+      meal_reminder_time?: string | null;
+      workout_reminder_time?: string | null;
+      /**
+       * Format: date-time
+       * @description Send a timestamp only when the user just opted in; omit/null otherwise.
+       */
+      consent_granted_at?: string | null;
+    };
+    NotificationPreferencesResponse: {
+      data: components['schemas']['NotificationPreferences'];
       meta: components['schemas']['Meta'];
     };
     /** @enum {string} */
@@ -1108,6 +1350,11 @@ export interface components {
       | 'health_data_processing'
       | 'ai_meal_processing'
       | 'progress_photo_storage';
+    /**
+     * @description `terms`, `privacy` and `health_data_processing` are required to complete onboarding. The
+     *     optional `ai_meal_processing` and `progress_photo_storage` consents are requested where they
+     *     are used (M4, M8), never here. Versions must be ones the server currently publishes.
+     */
     ConsentInput: {
       consent_type: components['schemas']['ConsentType'];
       version: string;
@@ -1144,12 +1391,26 @@ export interface components {
       id: string;
       profile_revision: number;
       policy_version: string;
+      /**
+       * @description `test` means a development placeholder policy: the numbers are not reviewed and must never
+       *     be presented as medical advice. Only `approved` policies may drive production planning.
+       * @enum {string}
+       */
+      policy_status: 'test' | 'approved';
       /** @enum {string} */
       method: 'policy' | 'user_override';
       method_reference: string | null;
       eligibility: components['schemas']['EligibilityStatus'];
+      /**
+       * @description point: one energy target. range: the calculation sex was declined, so only an energy range
+       *     is offered and energy-dependent targets are null. not_calculated: eligibility excludes
+       *     automated planning, so no targets exist.
+       * @enum {string}
+       */
+      basis: 'point' | 'range' | 'not_calculated';
       estimated_energy_kcal: components['schemas']['IntRange'] | null;
       targets: components['schemas']['MacroTargets'];
+      warnings: ('energy_floor_applied' | 'macro_budget_conflict')[];
       /** Format: date-time */
       valid_from: string;
     };
@@ -1228,6 +1489,11 @@ export interface components {
       score: number | null;
       /** @description Each component is capped at 25 in policy v1. */
       max_score: number;
+      /**
+       * @description Qualitative read of this component (M5 per-nutrient indicator), null only when score is null.
+       * @enum {string|null}
+       */
+      band: 'low' | 'adequate' | 'good' | null;
       evidence: {
         [key: string]: unknown;
       };
@@ -1410,11 +1676,18 @@ export interface components {
       /** @description Always true; a fix never applies without user confirmation. */
       requires_confirmation: boolean;
     };
+    /** @description What the meal's totals and Meal Balance would become if every suggested fix were applied together. `meal_balance.score` is null (per MealBalance's existing convention) whenever any part of the combined scenario cannot be calculated from complete catalog data — it is never estimated. Projected, not actual intake, per blueprint §7. */
+    AfterChangesScenario: {
+      totals: components['schemas']['NutrientTotals'];
+      meal_balance: components['schemas']['MealBalance'];
+      assumptions: string[];
+    };
     PlateFixes: {
       /** Format: uuid */
       scan_id: string;
       revision: number;
       fixes: components['schemas']['PlateAction'][];
+      after_changes: components['schemas']['AfterChangesScenario'];
     };
     PlateFixesResponse: {
       data: components['schemas']['PlateFixes'];
@@ -1604,7 +1877,25 @@ export interface components {
       expected_revision: number;
       candidate_id: string;
     };
+    /**
+     * @description plan means this option fills an existing slot in the active diet plan (swap-able); catalog means a standalone suggestion.
+     * @enum {string}
+     */
+    NextMealSource: 'plan' | 'catalog';
     NextMealOption: {
+      source: components['schemas']['NextMealSource'];
+      /**
+       * Format: uuid
+       * @description Non-null means this option can be swapped into that plan slot (send it back as
+       *     target_plan_meal_id). An alternative to an already-planned slot carries the SAME
+       *     plan_meal_id as the plan option, since swapping it in targets that slot. Null means there
+       *     is no plan slot to swap into; use the add action instead.
+       */
+      plan_meal_id: string | null;
+      /** @description expected_revision to send with a swap action targeting plan_meal_id. Null iff plan_meal_id is null. */
+      plan_meal_revision: number | null;
+      /** @description Echo this back as nextMealAction's candidate_id to add/swap this option. */
+      candidate_id: string;
       recipe: components['schemas']['RecipeRef'];
       portions: components['schemas']['PortionRef'][];
       nutrition: components['schemas']['NutrientTotals'];
@@ -1623,6 +1914,31 @@ export interface components {
       data: components['schemas']['NextMeal'];
       meta: components['schemas']['Meta'];
     };
+    /** @enum {string} */
+    NextMealActionType: 'add' | 'swap' | 'dismiss';
+    /**
+     * @description candidate_id is required for add/swap (from the chosen NextMealOption). target_plan_meal_id
+     *     and expected_revision are required for swap (the existing plan slot being replaced).
+     */
+    NextMealActionRequest: {
+      /** Format: date */
+      date: string;
+      slot: components['schemas']['MealSlot'];
+      action: components['schemas']['NextMealActionType'];
+      candidate_id?: string | null;
+      /** Format: uuid */
+      target_plan_meal_id?: string | null;
+      expected_revision?: number | null;
+    };
+    NextMealActionResult: {
+      action: components['schemas']['NextMealActionType'];
+      plan_meal: components['schemas']['PlanMeal'] | null;
+      dismissed: boolean;
+    };
+    NextMealActionResponse: {
+      data: components['schemas']['NextMealActionResult'];
+      meta: components['schemas']['Meta'];
+    };
     Insight: {
       key: string;
       evidence: {
@@ -1637,6 +1953,12 @@ export interface components {
       period_end: string;
       logged_meals: number;
       days_with_logs: number;
+      /** @description Days with logged meals AND complete nutrition coverage; the denominator of any average shown. */
+      usable_days: number;
+      /** @description Dates left out of the average because nothing was logged or coverage was incomplete. */
+      excluded_days: string[];
+      /** @description True when at least one day in the window was excluded from the average. */
+      coverage_uncertain: boolean;
       insights: components['schemas']['Insight'][];
       focus: components['schemas']['Insight'] | null;
     };
@@ -1808,16 +2130,30 @@ export interface components {
       date: string;
       weight_kg: number;
     };
+    /** @description Honest, data-only adherence. When no plan is active, planned/logged are null (never 0) so a missing plan is never mistaken for a real zero (docs/decisions.md D-030). */
+    AdherenceSummary: {
+      plan_active: boolean;
+      planned: number | null;
+      logged: number | null;
+    };
     Progress: {
       /** Format: date */
       period_start: string;
       /** Format: date */
       period_end: string;
       weight_points: components['schemas']['WeightPoint'][];
+      /** @description The user's first-ever recorded weight (weight-history entry, or the onboarding value). */
+      starting_weight_kg: number | null;
+      /** @description The latest weight-history entry, falling back to the profile's recorded weight. */
+      current_weight_kg: number | null;
+      /** @description The active goal's target weight, when one is set. */
+      goal_weight_kg: number | null;
       meal_logged_days: number;
+      diet_adherence: components['schemas']['AdherenceSummary'];
       workouts_completed: number;
       /** @description Scheduled sessions already elapsed; excludes future sessions and rest days. */
       workouts_scheduled_elapsed: number;
+      workout_adherence: components['schemas']['AdherenceSummary'];
     };
     ProgressResponse: {
       data: components['schemas']['Progress'];
@@ -2277,6 +2613,57 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TrainingPreferencesResponse'];
+        };
+      };
+      401: components['responses']['Unauthenticated'];
+      409: components['responses']['RevisionConflict'];
+      422: components['responses']['ValidationError'];
+    };
+  };
+  getNotificationPreferences: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current notification preferences. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NotificationPreferencesResponse'];
+        };
+      };
+      401: components['responses']['Unauthenticated'];
+    };
+  };
+  putNotificationPreferences: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Client-generated key (UUID recommended). Replays return the original result. */
+        'Idempotency-Key': components['parameters']['IdempotencyKey'];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NotificationPreferencesInput'];
+      };
+    };
+    responses: {
+      /** @description Saved notification preferences. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NotificationPreferencesResponse'];
         };
       };
       401: components['responses']['Unauthenticated'];
@@ -2879,9 +3266,11 @@ export interface operations {
   };
   getNextMeal: {
     parameters: {
-      query: {
-        date: components['parameters']['DateQueryRequired'];
-        slot: components['schemas']['MealSlot'];
+      query?: {
+        /** @description Local calendar date (YYYY-MM-DD). Defaults to today in the profile timezone. */
+        date?: components['parameters']['DateQuery'];
+        /** @description Request a specific slot instead of letting the engine pick the next unlogged one. */
+        slot?: components['schemas']['MealSlot'];
       };
       header?: never;
       path?: never;
@@ -2889,7 +3278,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Up to three grounded options. Never logged automatically. */
+      /** @description Up to three grounded options (primary plus alternatives). Never logged automatically. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -2899,6 +3288,37 @@ export interface operations {
         };
       };
       401: components['responses']['Unauthenticated'];
+      422: components['responses']['ValidationError'];
+    };
+  };
+  nextMealAction: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Client-generated key (UUID recommended). Replays return the original result. */
+        'Idempotency-Key': components['parameters']['IdempotencyKey'];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NextMealActionRequest'];
+      };
+    };
+    responses: {
+      /** @description Result of the add/swap/dismiss action. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['NextMealActionResponse'];
+        };
+      };
+      401: components['responses']['Unauthenticated'];
+      404: components['responses']['NotFound'];
+      409: components['responses']['RevisionConflict'];
       422: components['responses']['ValidationError'];
     };
   };
@@ -3306,6 +3726,33 @@ export interface operations {
         };
       };
       401: components['responses']['Unauthenticated'];
+    };
+  };
+  deleteCoachThread: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Client-generated key (UUID recommended). Replays return the original result. */
+        'Idempotency-Key': components['parameters']['IdempotencyKey'];
+      };
+      path: {
+        id: components['parameters']['IdPath'];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deleted. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DeletedResponse'];
+        };
+      };
+      401: components['responses']['Unauthenticated'];
+      404: components['responses']['NotFound'];
     };
   };
   listCoachMessages: {

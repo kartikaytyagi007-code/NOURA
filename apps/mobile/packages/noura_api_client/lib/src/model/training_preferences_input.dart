@@ -4,6 +4,8 @@
 
 // ignore_for_file: unused_element
 import 'package:noura_api_client/src/model/experience_level.dart';
+import 'package:noura_api_client/src/model/equipment_tag.dart';
+import 'package:noura_api_client/src/model/limitation_tag.dart';
 import 'package:noura_api_client/src/model/training_location.dart';
 import 'package:copy_with_extension/copy_with_extension.dart';
 import 'package:json_annotation/json_annotation.dart';
@@ -38,7 +40,8 @@ class TrainingPreferencesInput {
     required this.limitationTags,
   });
 
-  // minimum: 1
+  /// Current training-preferences revision; 0 when none exist yet.
+  // minimum: 0
   @JsonKey(name: r'expected_revision', required: true, includeIfNull: false)
   final int expectedRevision;
 
@@ -49,7 +52,7 @@ class TrainingPreferencesInput {
   final TrainingLocation location;
 
   @JsonKey(name: r'equipment_ids', required: true, includeIfNull: false)
-  final Set<String> equipmentIds;
+  final Set<EquipmentTag> equipmentIds;
 
   @JsonKey(name: r'weekdays', required: true, includeIfNull: false)
   final Set<int> weekdays;
@@ -65,7 +68,7 @@ class TrainingPreferencesInput {
   final int durationMinutes;
 
   @JsonKey(name: r'limitation_tags', required: true, includeIfNull: false)
-  final Set<String> limitationTags;
+  final Set<LimitationTag> limitationTags;
 
   bool operator ==(Object other) {
     return identical(this, other) ||

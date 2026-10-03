@@ -1,9 +1,22 @@
 import { randomUUID } from 'node:crypto';
+import { createBillingProvider, type BillingProvider } from '@noura/billing';
+import { createMediaStorage, type MediaStorage } from '@noura/domain';
 import Fastify, { LogController, type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { ApiConfig } from './config.js';
+import { registerAccountRoutes } from './modules/account/routes.js';
+import { registerBillingRoutes } from './modules/billing/routes.js';
+import { registerCoachRoutes } from './modules/coach/routes.js';
+import { registerDietRoutes } from './modules/diet/routes.js';
 import { registerHealthRoutes } from './modules/health/routes.js';
 import { registerJobRoutes } from './modules/jobs/routes.js';
+import { registerMealRoutes } from './modules/meals/routes.js';
+import { registerMediaRoutes } from './modules/media/routes.js';
+import { registerDevStorageRoutes } from './modules/media/dev-storage.js';
 import { registerMeRoutes } from './modules/me/routes.js';
+import { registerProfileRoutes } from './modules/profile/routes.js';
+import { registerProgressRoutes } from './modules/progress/routes.js';
+import { registerRecommendationRoutes } from './modules/recommendations/routes.js';
+import { registerWorkoutRoutes } from './modules/workouts/routes.js';
 import type { TokenVerifier } from './plugins/auth.js';
 import type { Database } from './plugins/db.js';
 import { registerErrorHandling } from './plugins/errors.js';
@@ -12,6 +25,10 @@ export interface AppDeps {
   config: ApiConfig;
   db: Database;
   verifyToken: TokenVerifier;
+  /** Built from config automatically when omitted; tests may inject one (e.g. to pre-seed bytes). */
+  media?: MediaStorage;
+  /** Built from config automatically when omitted (docs/decisions.md D-010 pattern). */
+  billing?: BillingProvider;
 }
 
 const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,128}$/;
@@ -55,9 +72,50 @@ export function buildApp(
     reply.header('cache-control', 'no-store');
   });
 
+  const media =
+    deps.media ??
+    createMediaStorage({
+      appEnv: deps.config.appEnv,
+      driver: deps.config.media.driver,
+      supabaseUrl: deps.config.media.supabaseUrl,
+      serviceRoleKey: deps.config.media.serviceRoleKey,
+      local: {
+        baseDir: deps.config.media.devStorageDir,
+        publicBaseUrl: deps.config.media.devStorageBaseUrl,
+        signingSecret: deps.config.media.devStorageSigningSecret,
+      },
+    });
+  const billing =
+    deps.billing ??
+    createBillingProvider({
+      appEnv: deps.config.appEnv,
+      provider: deps.config.billing.provider,
+      secretApiKey: deps.config.billing.secretApiKey,
+      webhookAuthorization: deps.config.billing.webhookAuthorization,
+    });
+  const fullDeps: Required<AppDeps> = { ...deps, media, billing };
+
   registerErrorHandling(app);
-  registerHealthRoutes(app, deps);
-  registerMeRoutes(app, deps);
-  registerJobRoutes(app, deps);
+  registerHealthRoutes(app, fullDeps);
+  registerMeRoutes(app, fullDeps);
+  registerProfileRoutes(app, fullDeps);
+  registerJobRoutes(app, fullDeps);
+  registerDietRoutes(app, fullDeps);
+  registerMediaRoutes(app, fullDeps);
+  registerMealRoutes(app, fullDeps);
+  registerRecommendationRoutes(app, fullDeps);
+  registerWorkoutRoutes(app, fullDeps);
+  registerProgressRoutes(app, fullDeps);
+  registerCoachRoutes(app, fullDeps);
+  registerBillingRoutes(app, fullDeps);
+  registerAccountRoutes(app, fullDeps);
+  // Development/test only: see modules/media/dev-storage.ts. Never registered when deployed.
+  if (
+    deps.config.appEnv !== 'staging' &&
+    deps.config.appEnv !== 'production' &&
+    media.driver === 'local'
+  ) {
+    registerDevStorageRoutes(app, fullDeps, media);
+  }
   return app;
 }

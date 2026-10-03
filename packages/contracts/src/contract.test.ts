@@ -26,13 +26,69 @@ describe('OpenAPI contract structure', () => {
     }
   });
 
-  it('implements exactly the M1 operations in M1', () => {
-    const implemented = ops
-      .filter((o) => o.status === 'implemented')
-      .map((o) => o.operationId)
-      .sort();
-    expect(implemented).toEqual(['getJob', 'getLiveness', 'getMe', 'getReadiness']);
-    for (const op of ops.filter((o) => o.status === 'implemented')) expect(op.milestone).toBe('M1');
+  it('implements exactly the M1-M10 operations, each tagged with its milestone', () => {
+    const implemented = Object.fromEntries(
+      ops.filter((o) => o.status === 'implemented').map((o) => [o.operationId, o.milestone]),
+    );
+    expect(implemented).toEqual({
+      getLiveness: 'M1',
+      getReadiness: 'M1',
+      getMe: 'M1',
+      getJob: 'M1',
+      patchMe: 'M2',
+      putPreferences: 'M2',
+      putTrainingPreferences: 'M2',
+      completeOnboarding: 'M2',
+      getTargets: 'M2',
+      generateDietPlan: 'M3',
+      getCurrentDietPlan: 'M3',
+      getSwapOptions: 'M3',
+      replacePlanMeal: 'M3',
+      createUploadSlot: 'M4',
+      completeUpload: 'M4',
+      getMediaDownload: 'M4',
+      deleteMedia: 'M4',
+      createMealScan: 'M4',
+      getMealScan: 'M4',
+      confirmMealScanItems: 'M4',
+      createMealLog: 'M4',
+      listMealLogs: 'M4',
+      patchMealLog: 'M4',
+      deleteMealLog: 'M4',
+      createPlateFixes: 'M5',
+      getHome: 'M6',
+      getNextMeal: 'M6',
+      nextMealAction: 'M6',
+      getInsights: 'M6',
+      generateWorkoutPlan: 'M7',
+      getCurrentWorkoutPlan: 'M7',
+      getExerciseSubstitutions: 'M7',
+      createWorkoutLog: 'M7',
+      putWorkoutSets: 'M7',
+      patchWorkoutLog: 'M7',
+      listWeightLogs: 'M8',
+      createWeightLog: 'M8',
+      deleteWeightLog: 'M8',
+      listProgressPhotos: 'M8',
+      createProgressPhoto: 'M8',
+      deleteProgressPhoto: 'M8',
+      getProgress: 'M8',
+      createCoachThread: 'M9',
+      deleteCoachThread: 'M9',
+      listCoachMessages: 'M9',
+      sendCoachMessage: 'M9',
+      applyActionProposal: 'M9',
+      cancelActionProposal: 'M9',
+      getNotificationPreferences: 'M10',
+      putNotificationPreferences: 'M10',
+      getEntitlements: 'M10',
+      getUsage: 'M10',
+      syncBilling: 'M10',
+      receiveRevenueCatWebhook: 'M10',
+      requestAccountExport: 'M10',
+      getAccountExport: 'M10',
+      deleteAccount: 'M10',
+    });
   });
 
   it('covers exactly the blueprint §11 route inventory', () => {
@@ -41,6 +97,11 @@ describe('OpenAPI contract structure', () => {
       'PATCH /me',
       'PUT /me/preferences',
       'PUT /me/training-preferences',
+      // Local-reminder consent/preferences (blueprint §18 "User reminders initially use local device
+      // notifications after opt-in"); not in the blueprint's §11 table verbatim, but the same
+      // GET/PUT-preference shape as the other /me/* resources above (D-03x, M10).
+      'GET /me/notification-preferences',
+      'PUT /me/notification-preferences',
       'POST /onboarding/complete',
       'GET /targets',
       'GET /home',
@@ -63,6 +124,7 @@ describe('OpenAPI contract structure', () => {
       'POST /diet-plan-meals/{id}/swap-options',
       'PUT /diet-plan-meals/{id}',
       'GET /recommendations/next-meal',
+      'POST /recommendations/next-meal/actions',
       'GET /insights',
       'POST /workout-plans/generate',
       'GET /workout-plans/current',
@@ -78,6 +140,7 @@ describe('OpenAPI contract structure', () => {
       'DELETE /progress-photos/{id}',
       'GET /progress',
       'POST /coach/threads',
+      'DELETE /coach/threads/{id}',
       'GET /coach/threads/{id}/messages',
       'POST /coach/threads/{id}/messages',
       'POST /action-proposals/{id}/apply',

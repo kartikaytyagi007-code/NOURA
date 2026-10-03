@@ -15,6 +15,8 @@ abstract class _$ProfileCWProxy {
 
   Profile heightCm(num? heightCm);
 
+  Profile weightKg(num? weightKg);
+
   Profile activityBand(ActivityBand? activityBand);
 
   Profile timezone(String timezone);
@@ -34,6 +36,7 @@ abstract class _$ProfileCWProxy {
     int? ageYears,
     CalculationSex? calculationSex,
     num? heightCm,
+    num? weightKg,
     ActivityBand? activityBand,
     String timezone,
     UnitSystem unitSystem,
@@ -61,6 +64,9 @@ class _$ProfileCWProxyImpl implements _$ProfileCWProxy {
   Profile heightCm(num? heightCm) => this(heightCm: heightCm);
 
   @override
+  Profile weightKg(num? weightKg) => this(weightKg: weightKg);
+
+  @override
   Profile activityBand(ActivityBand? activityBand) =>
       this(activityBand: activityBand);
 
@@ -85,6 +91,7 @@ class _$ProfileCWProxyImpl implements _$ProfileCWProxy {
     Object? ageYears = const $CopyWithPlaceholder(),
     Object? calculationSex = const $CopyWithPlaceholder(),
     Object? heightCm = const $CopyWithPlaceholder(),
+    Object? weightKg = const $CopyWithPlaceholder(),
     Object? activityBand = const $CopyWithPlaceholder(),
     Object? timezone = const $CopyWithPlaceholder(),
     Object? unitSystem = const $CopyWithPlaceholder(),
@@ -107,6 +114,10 @@ class _$ProfileCWProxyImpl implements _$ProfileCWProxy {
           ? _value.heightCm
           // ignore: cast_nullable_to_non_nullable
           : heightCm as num?,
+      weightKg: weightKg == const $CopyWithPlaceholder()
+          ? _value.weightKg
+          // ignore: cast_nullable_to_non_nullable
+          : weightKg as num?,
       activityBand: activityBand == const $CopyWithPlaceholder()
           ? _value.activityBand
           // ignore: cast_nullable_to_non_nullable
@@ -148,6 +159,7 @@ Profile _$ProfileFromJson(Map<String, dynamic> json) => $checkedCreate(
         'age_years',
         'calculation_sex',
         'height_cm',
+        'weight_kg',
         'activity_band',
         'timezone',
         'unit_system',
@@ -162,6 +174,7 @@ Profile _$ProfileFromJson(Map<String, dynamic> json) => $checkedCreate(
         (v) => $enumDecodeNullable(_$CalculationSexEnumMap, v),
       ),
       heightCm: $checkedConvert('height_cm', (v) => v as num?),
+      weightKg: $checkedConvert('weight_kg', (v) => v as num?),
       activityBand: $checkedConvert(
         'activity_band',
         (v) => $enumDecodeNullable(_$ActivityBandEnumMap, v),
@@ -180,6 +193,7 @@ Profile _$ProfileFromJson(Map<String, dynamic> json) => $checkedCreate(
     'ageYears': 'age_years',
     'calculationSex': 'calculation_sex',
     'heightCm': 'height_cm',
+    'weightKg': 'weight_kg',
     'activityBand': 'activity_band',
     'unitSystem': 'unit_system',
   },
@@ -190,6 +204,7 @@ Map<String, dynamic> _$ProfileToJson(Profile instance) => <String, dynamic>{
   'age_years': instance.ageYears,
   'calculation_sex': _$CalculationSexEnumMap[instance.calculationSex],
   'height_cm': instance.heightCm,
+  'weight_kg': instance.weightKg,
   'activity_band': _$ActivityBandEnumMap[instance.activityBand],
   'timezone': instance.timezone,
   'unit_system': _$UnitSystemEnumMap[instance.unitSystem]!,

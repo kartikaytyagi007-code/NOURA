@@ -1,3 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { TEST_TARGET_POLICY, parseTargetPolicy, type TargetPolicy } from '@noura/domain';
 import { z } from 'zod';
 
 /**
@@ -32,6 +37,8 @@ const schema = z
     SUPABASE_JWT_AUDIENCE: z.string().min(1).default('authenticated'),
     SUPABASE_JWKS_URL: z.url().optional(),
 
+    PLANNING_POLICY_FILE: z.string().min(1).optional(),
+
     AI_PROVIDER: z.enum(['mock', 'gemini']).optional(),
     AI_API_KEY: z.string().min(1).optional(),
     AI_MODEL_ID: z.string().min(1).optional(),
@@ -39,6 +46,20 @@ const schema = z
     BILLING_PROVIDER: z.enum(['mock', 'revenuecat']).optional(),
     REVENUECAT_SECRET_API_KEY: z.string().min(1).optional(),
     REVENUECAT_WEBHOOK_AUTH: z.string().min(16).optional(),
+
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+    MEDIA_STORAGE_DRIVER: z.enum(['local', 'supabase']).optional(),
+    DEV_STORAGE_DIR: z.string().min(1).optional(),
+    DEV_STORAGE_SIGNING_SECRET: z.string().min(1).optional(),
+    DEV_STORAGE_BASE_URL: z.string().min(1).optional(),
+
+    // Server-controlled free/premium daily quotas (blueprint §13's own proposed figures by default;
+    // a release reviewer can override any of them without a code change). See
+    // packages/domain/src/billing/limits.ts.
+    MEAL_SCAN_FREE_DAILY_QUOTA: z.coerce.number().int().min(0).default(3),
+    MEAL_SCAN_PREMIUM_DAILY_QUOTA: z.coerce.number().int().min(0).default(20),
+    COACH_REPLY_FREE_DAILY_QUOTA: z.coerce.number().int().min(0).default(5),
+    COACH_REPLY_PREMIUM_DAILY_QUOTA: z.coerce.number().int().min(0).default(20),
   })
   .superRefine((env, ctx) => {
     const deployed = env.APP_ENV === 'staging' || env.APP_ENV === 'production';
@@ -64,6 +85,17 @@ const schema = z
         'RevenueCat secret API key and webhook authorization are required',
       );
     }
+    if (env.MEDIA_STORAGE_DRIVER === 'local') {
+      issue(
+        'MEDIA_STORAGE_DRIVER',
+        `local media storage is not allowed when APP_ENV=${env.APP_ENV}`,
+      );
+    } else if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+      issue(
+        'SUPABASE_SERVICE_ROLE_KEY',
+        'a Supabase service-role key is required for private media',
+      );
+    }
   });
 
 export type RawEnv = z.input<typeof schema>;
@@ -81,7 +113,28 @@ export interface ApiConfig {
   pgBossSchema: string;
   auth: { issuer: string; audience: string; jwksUrl: string };
   ai: { provider: 'mock' | 'gemini'; apiKey?: string | undefined; modelId?: string | undefined };
-  billing: { provider: 'mock' | 'revenuecat' };
+  billing: {
+    provider: 'mock' | 'revenuecat';
+    secretApiKey?: string | undefined;
+    webhookAuthorization?: string | undefined;
+  };
+  quotas: {
+    mealScan: { free: number; premium: number };
+    coachReply: { free: number; premium: number };
+  };
+  media: {
+    driver: 'local' | 'supabase' | undefined;
+    supabaseUrl: string;
+    serviceRoleKey?: string | undefined;
+    devStorageDir: string;
+    devStorageSigningSecret: string;
+    devStorageBaseUrl: string;
+  };
+  /**
+   * The target policy that drives automated planning, or null when none is configured. Development
+   * and test default to the clearly labelled TEST policy; staging and production never do (D-018).
+   */
+  planningPolicy: TargetPolicy | null;
 }
 
 export class ConfigError extends Error {
@@ -89,6 +142,29 @@ export class ConfigError extends Error {
     super(`Invalid configuration:\n  - ${issues.join('\n  - ')}`);
     this.name = 'ConfigError';
   }
+}
+
+function loadPlanningPolicy(file: string | undefined, deployed: boolean): TargetPolicy | null {
+  if (!file) return deployed ? null : TEST_TARGET_POLICY;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    throw new ConfigError(['PLANNING_POLICY_FILE: the file could not be read as JSON']);
+  }
+  let policy: TargetPolicy;
+  try {
+    policy = parseTargetPolicy(raw);
+  } catch (error) {
+    // parseTargetPolicy reports field paths only, never values.
+    throw new ConfigError([`PLANNING_POLICY_FILE: ${(error as Error).message}`]);
+  }
+  if (deployed && policy.status !== 'approved') {
+    throw new ConfigError([
+      'PLANNING_POLICY_FILE: a test policy is not allowed in this environment',
+    ]);
+  }
+  return policy;
 }
 
 /** Parses environment variables. Error messages name variables but never echo their values. */
@@ -119,6 +195,30 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     },
     // Development defaults to explicit mocks; deployed environments were validated above.
     ai: { provider: e.AI_PROVIDER ?? 'mock', apiKey: e.AI_API_KEY, modelId: e.AI_MODEL_ID },
-    billing: { provider: e.BILLING_PROVIDER ?? 'mock' },
+    billing: {
+      provider: e.BILLING_PROVIDER ?? 'mock',
+      secretApiKey: e.REVENUECAT_SECRET_API_KEY,
+      webhookAuthorization: e.REVENUECAT_WEBHOOK_AUTH,
+    },
+    quotas: {
+      mealScan: { free: e.MEAL_SCAN_FREE_DAILY_QUOTA, premium: e.MEAL_SCAN_PREMIUM_DAILY_QUOTA },
+      coachReply: {
+        free: e.COACH_REPLY_FREE_DAILY_QUOTA,
+        premium: e.COACH_REPLY_PREMIUM_DAILY_QUOTA,
+      },
+    },
+    media: {
+      driver: e.MEDIA_STORAGE_DRIVER,
+      supabaseUrl: e.SUPABASE_URL,
+      serviceRoleKey: e.SUPABASE_SERVICE_ROLE_KEY,
+      devStorageDir: e.DEV_STORAGE_DIR ?? join(tmpdir(), `noura-dev-storage-${randomUUID()}`),
+      devStorageSigningSecret: e.DEV_STORAGE_SIGNING_SECRET ?? 'dev-only-insecure-signing-secret',
+      devStorageBaseUrl:
+        e.DEV_STORAGE_BASE_URL ?? `http://${e.HOST === '0.0.0.0' ? '127.0.0.1' : e.HOST}:${e.PORT}`,
+    },
+    planningPolicy: loadPlanningPolicy(
+      e.PLANNING_POLICY_FILE,
+      e.APP_ENV === 'staging' || e.APP_ENV === 'production',
+    ),
   };
 }

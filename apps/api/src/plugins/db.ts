@@ -1,4 +1,4 @@
-import { withUserTransaction, type Queryable } from '@noura/domain';
+import { withSystemTransaction, withUserTransaction, type Queryable } from '@noura/domain';
 import pg from 'pg';
 
 /**
@@ -21,6 +21,14 @@ export class Database {
 
   forUser<T>(userId: string, fn: (client: Queryable) => Promise<T>): Promise<T> {
     return withUserTransaction(this.pool, 'noura_api', userId, fn);
+  }
+
+  /**
+   * For narrow, not-one-user-owned work only (webhook ingestion, which carries no user token) —
+   * see `withSystemTransaction`'s own caveat about RLS matching nothing without a user context.
+   */
+  system<T>(fn: (client: Queryable) => Promise<T>): Promise<T> {
+    return withSystemTransaction(this.pool, 'noura_api', fn);
   }
 
   /** Readiness: connectivity, the connection user's ability to assume noura_api, and queue schema. */

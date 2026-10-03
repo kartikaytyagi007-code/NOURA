@@ -17,6 +17,7 @@ dependencies:
   noura_api_client:
     path: packages/noura_api_client
   supabase_flutter: 2.18.0
+  image_picker: 1.2.3
 
 dev_dependencies:
   flutter_test:

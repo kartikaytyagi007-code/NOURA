@@ -112,9 +112,16 @@ paths:
     patch:
       operationId: patchMe
       tags: [profile]
-      summary: Save a partial profile / onboarding step.
+      summary: Save a partial profile / goal / screening / onboarding step.
+      description: |
+        Merges the supplied fields into the profile and bumps the profile revision by one.
+        `expected_revision` must equal the current revision (409 otherwise). The server validates every
+        field, recomputes eligibility when age or screening change, and, once onboarding is completed,
+        refreshes the target snapshot when a target-relevant field changed. `onboarding_step` may only
+        be set while onboarding is not completed. Replays of the same `Idempotency-Key` return the
+        original response.
       x-noura-milestone: M2
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -135,9 +142,12 @@ paths:
     put:
       operationId: putPreferences
       summary: Replace diet preferences.
+      description: |
+        Whole-object replacement. `expected_revision` is the preferences revision from `GET /v1/me`
+        (`0` when no preferences exist yet). The first save creates revision 1.
       tags: [profile]
       x-noura-milestone: M2
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -158,9 +168,12 @@ paths:
     put:
       operationId: putTrainingPreferences
       summary: Replace training preferences.
+      description: |
+        Whole-object replacement. `expected_revision` is the training-preferences revision from
+        `GET /v1/me` (`0` when none exist yet). The first save creates revision 1.
       tags: [profile]
       x-noura-milestone: M2
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -177,13 +190,64 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '409': { $ref: '#/components/responses/RevisionConflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/me/notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      summary: Local-reminder consent and preferences.
+      description: |
+        Backed by `app.user_preferences.reminder_settings` (an M1-provisioned jsonb column, unused
+        until this milestone). Reminders are local device notifications only after explicit opt-in
+        (blueprint §18: "No push infrastructure needed for V1") — there is no server-held push token.
+      tags: [profile]
+      x-noura-milestone: M10
+      x-noura-status: implemented
+      responses:
+        '200':
+          description: Current notification preferences.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPreferencesResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    put:
+      operationId: putNotificationPreferences
+      summary: Replace local-reminder consent and preferences.
+      description: |
+        Whole-object replacement, same revision contract as the other `/v1/me/*` preference
+        resources. Setting `consent_granted_at` happens only when the client sends a non-null value
+        (an explicit opt-in action), never implicitly.
+      tags: [profile]
+      x-noura-milestone: M10
+      x-noura-status: implemented
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationPreferencesInput' }
+      responses:
+        '200':
+          description: Saved notification preferences.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPreferencesResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /v1/onboarding/complete:
     post:
       operationId: completeOnboarding
       tags: [profile]
-      summary: Transactionally completes onboarding, creates target snapshot and plan jobs.
+      summary: Transactionally completes onboarding, creates the target snapshot and the plan request.
+      description: |
+        In one transaction: verifies the profile revision and that every onboarding input is present,
+        records consents, determines eligibility, completes onboarding, and (only for eligible users
+        when an allowed target policy exists) writes a target snapshot and one durable generation
+        request. The request is relayed to the job queue by the worker, so a queue or generation
+        failure never loses profile data. Replays of the same `Idempotency-Key` return the original
+        response; a second completion is rejected.
       x-noura-milestone: M2
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -206,7 +270,7 @@ paths:
       summary: Current nutrition target snapshot.
       tags: [profile]
       x-noura-milestone: M2
-      x-noura-status: planned
+      x-noura-status: implemented
       responses:
         '200':
           description: Current target snapshot and calculation method.
@@ -222,7 +286,7 @@ paths:
       summary: Home summary for a date.
       tags: [home]
       x-noura-milestone: M6
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/DateQuery'
       responses:
@@ -240,7 +304,7 @@ paths:
       summary: Reserve an owner-scoped signed upload slot.
       tags: [media]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -263,7 +327,7 @@ paths:
       summary: Confirm an upload and verify the stored bytes.
       tags: [media]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -282,7 +346,7 @@ paths:
       summary: Short-lived signed download link for owned media.
       tags: [media]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
       responses:
@@ -299,7 +363,7 @@ paths:
       summary: Delete owned media.
       tags: [media]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -318,7 +382,7 @@ paths:
       summary: Start recognition for an uploaded meal image.
       tags: [meals]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -342,7 +406,7 @@ paths:
       summary: Meal scan state and recognition candidates.
       tags: [meals]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
       responses:
@@ -359,7 +423,7 @@ paths:
       summary: Confirm foods and portions; returns calculated analysis.
       tags: [meals]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -384,7 +448,7 @@ paths:
       summary: Propose up to three plate improvements.
       tags: [meals]
       x-noura-milestone: M5
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -450,7 +514,7 @@ paths:
       summary: Log a confirmed meal.
       tags: [meals]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -472,7 +536,7 @@ paths:
       summary: Meal diary for a date.
       tags: [meals]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/DateQueryRequired'
       responses:
@@ -489,7 +553,7 @@ paths:
       summary: Edit a meal log.
       tags: [meals]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -513,7 +577,7 @@ paths:
       summary: Delete a meal log.
       tags: [meals]
       x-noura-milestone: M4
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -534,7 +598,7 @@ paths:
       summary: Request seven-day diet plan generation.
       tags: [diet]
       x-noura-milestone: M3
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -558,7 +622,7 @@ paths:
       summary: Active weekly diet plan.
       tags: [diet]
       x-noura-milestone: M3
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/DateQuery'
       responses:
@@ -575,7 +639,7 @@ paths:
       summary: Swap candidates for a plan meal with a daily preview.
       tags: [diet]
       x-noura-milestone: M3
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
       requestBody:
@@ -599,7 +663,7 @@ paths:
       summary: Replace one plan meal with a confirmed candidate.
       tags: [diet]
       x-noura-milestone: M3
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -621,31 +685,76 @@ paths:
   /v1/recommendations/next-meal:
     get:
       operationId: getNextMeal
-      summary: Three grounded next-meal options.
+      summary: The next-meal recommendation, with reasons and alternatives.
+      description: |
+        Determines whichever of today's slots (breakfast/lunch/dinner/snack) is next by time of day
+        and not yet logged, or uses `slot` as an explicit override (e.g. "what should I have for
+        dinner"). Grounded entirely in the caller's active diet plan, today's meal log and the
+        eligible catalog (blueprint §9, §16 M6); never an AI-invented suggestion. `limited_context`
+        is true whenever today's logged intake is empty or has incomplete nutrition coverage, so a
+        gap-based reason is never implied from data that cannot support it.
       tags: [diet]
       x-noura-milestone: M6
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
-        - $ref: '#/components/parameters/DateQueryRequired'
+        - $ref: '#/components/parameters/DateQuery'
         - name: slot
           in: query
-          required: true
+          required: false
+          description: Request a specific slot instead of letting the engine pick the next unlogged one.
           schema: { $ref: '#/components/schemas/MealSlot' }
       responses:
         '200':
-          description: Up to three grounded options. Never logged automatically.
+          description: Up to three grounded options (primary plus alternatives). Never logged automatically.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NextMealResponse' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '422': { $ref: '#/components/responses/ValidationError' }
+  /v1/recommendations/next-meal/actions:
+    post:
+      operationId: nextMealAction
+      summary: Add, swap or dismiss a next-meal recommendation.
+      description: |
+        `add` creates a new plan slot from the recommended recipe when the date/slot has no planned
+        meal yet (requires an active plan). `swap` replaces an existing planned slot with the
+        recommended candidate, by calling the same `replacePlanMeal` domain logic the diet-plan swap
+        screen uses (blueprint §9) — never a separate, duplicated code path. `dismiss` sticks for that
+        date/slot (D-028) so a later GET honestly reports it was dismissed instead of recomputing the
+        same suggestion. Safe to retry: identical `Idempotency-Key` + body replays the same result.
+      tags: [diet]
+      x-noura-milestone: M6
+      x-noura-status: implemented
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NextMealActionRequest' }
+      responses:
+        '200':
+          description: Result of the add/swap/dismiss action.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NextMealActionResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/RevisionConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /v1/insights:
     get:
       operationId: getInsights
       summary: Seven-day nutrition patterns.
+      description: |
+        Daily and seven-day nutrition-pattern summaries from recorded meals (blueprint §10, §16 M6).
+        A protein/fibre gap is identified only when the underlying data supports it: a day with no
+        logs or incomplete nutrition coverage is excluded from the seven-day average and named in
+        `excluded_days`/`coverage_uncertain` rather than silently counted as zero, and a gap is only
+        ever reported once enough usable days exist to support the conclusion.
       tags: [insights]
       x-noura-milestone: M6
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - name: period
           in: query
@@ -666,7 +775,7 @@ paths:
       summary: Request weekly workout plan generation.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -690,7 +799,7 @@ paths:
       summary: Active weekly workout plan.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       responses:
         '200':
           description: Week and session prescriptions.
@@ -705,7 +814,7 @@ paths:
       summary: Compatible exercise substitutions.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
       responses:
@@ -722,7 +831,7 @@ paths:
       summary: Start a workout log for a session.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -745,7 +854,7 @@ paths:
       summary: Save set logs for a workout.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -770,7 +879,7 @@ paths:
       summary: Mark a workout completed, skipped or abandoned.
       tags: [workouts]
       x-noura-milestone: M7
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -796,7 +905,7 @@ paths:
       summary: Weight history.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -812,7 +921,7 @@ paths:
       summary: Record a weight measurement.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -834,7 +943,7 @@ paths:
       summary: Delete a weight measurement.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -852,7 +961,7 @@ paths:
       summary: Private progress photo references.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -868,7 +977,7 @@ paths:
       summary: Register an uploaded progress photo.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -891,7 +1000,7 @@ paths:
       summary: Delete a progress photo.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -909,7 +1018,7 @@ paths:
       summary: Weight and consistency trends.
       tags: [progress]
       x-noura-milestone: M8
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - name: period
           in: query
@@ -930,7 +1039,7 @@ paths:
       summary: Create a coach thread.
       tags: [coach]
       x-noura-milestone: M9
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -940,13 +1049,31 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CoachThreadResponse' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+  /v1/coach/threads/{id}:
+    delete:
+      operationId: deleteCoachThread
+      summary: Delete an owned coach thread and its messages/proposals (D-031; user-initiated deletion).
+      tags: [coach]
+      x-noura-milestone: M9
+      x-noura-status: implemented
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletedResponse' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /v1/coach/threads/{id}/messages:
     get:
       operationId: listCoachMessages
       summary: Messages in an owned coach thread.
       tags: [coach]
       x-noura-milestone: M9
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/Cursor'
@@ -964,7 +1091,7 @@ paths:
       summary: Send a message to the coach.
       tags: [coach]
       x-noura-milestone: M9
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -989,7 +1116,7 @@ paths:
       summary: Apply a coach proposal once.
       tags: [coach]
       x-noura-milestone: M9
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1014,7 +1141,7 @@ paths:
       summary: Cancel a coach proposal.
       tags: [coach]
       x-noura-milestone: M9
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1052,7 +1179,7 @@ paths:
       summary: Server-side entitlements.
       tags: [billing]
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       responses:
         '200':
           description: Server-side entitlement truth.
@@ -1066,7 +1193,7 @@ paths:
       summary: Current usage and limits.
       tags: [billing]
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       responses:
         '200':
           description: Current usage and limits.
@@ -1080,7 +1207,7 @@ paths:
       tags: [billing]
       summary: Refresh entitlements from the provider. Never accepts a client premium flag.
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -1099,7 +1226,7 @@ paths:
       security:
         - revenueCatWebhookAuth: []
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       requestBody:
         required: true
         content:
@@ -1120,7 +1247,7 @@ paths:
       summary: Request a data export.
       tags: [account]
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -1137,7 +1264,7 @@ paths:
       summary: Export status and download link.
       tags: [account]
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdPath'
       responses:
@@ -1154,7 +1281,7 @@ paths:
       tags: [account]
       summary: Requires a recently issued access token (recent authentication).
       x-noura-milestone: M10
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -1436,6 +1563,13 @@ components:
       type: string
       enum: [female, male]
       description: Optional parameter for energy equations only. Not gender identity.
+    CalculationSexInput:
+      type: string
+      enum: [female, male, declined]
+      description: |
+        Input form of CalculationSex. `declined` stores "no value" (the profile then reads null) and
+        yields an energy range instead of a single target. It exists so a client can clear a
+        previously given value explicitly; JSON null is not used in requests.
     ActivityBand:
       type: string
       enum: [sedentary, light, moderate, active, very_active]
@@ -1472,7 +1606,7 @@ components:
     Profile:
       type: object
       additionalProperties: false
-      required: [display_name, age_years, calculation_sex, height_cm, activity_band, timezone, unit_system, revision]
+      required: [display_name, age_years, calculation_sex, height_cm, weight_kg, activity_band, timezone, unit_system, revision]
       properties:
         display_name: { type: string, nullable: true, minLength: 1, maxLength: 80 }
         age_years: { type: integer, nullable: true, minimum: 1, maximum: 120 }
@@ -1481,6 +1615,7 @@ components:
           allOf: [{ $ref: '#/components/schemas/CalculationSex' }]
           nullable: true
         height_cm: { type: number, nullable: true, minimum: 50, maximum: 272 }
+        weight_kg: { type: number, nullable: true, minimum: 20, maximum: 400 }
         activity_band:
           type: string
           allOf: [{ $ref: '#/components/schemas/ActivityBand' }]
@@ -1507,10 +1642,22 @@ components:
           type: string
           allOf: [{ $ref: '#/components/schemas/DietType' }]
           nullable: true
-        allergy_ids: { type: array, maxItems: 30, items: { type: string, maxLength: 64 } }
-        exclusion_ids: { type: array, maxItems: 50, items: { type: string, maxLength: 64 } }
+        allergy_ids:
+          type: array
+          maxItems: 30
+          description: Allergy tags (AllergyTag). Clients ignore values they do not know.
+          items: { type: string, maxLength: 64 }
+        exclusion_ids:
+          type: array
+          maxItems: 50
+          description: Food exclusion tags (ExclusionTag). Clients ignore values they do not know.
+          items: { type: string, maxLength: 64 }
         dislikes: { type: array, maxItems: 50, items: { type: string, maxLength: 80 } }
-        cuisines: { type: array, maxItems: 20, items: { type: string, maxLength: 64 } }
+        cuisines:
+          type: array
+          maxItems: 20
+          description: Cuisine tags (CuisineTag). Clients ignore values they do not know.
+          items: { type: string, maxLength: 64 }
         budget_band:
           type: string
           allOf: [{ $ref: '#/components/schemas/BudgetBand' }]
@@ -1534,7 +1681,11 @@ components:
           type: string
           allOf: [{ $ref: '#/components/schemas/TrainingLocation' }]
           nullable: true
-        equipment_ids: { type: array, maxItems: 50, items: { type: string, maxLength: 64 } }
+        equipment_ids:
+          type: array
+          maxItems: 50
+          description: Equipment tags (EquipmentTag). Clients ignore values they do not know.
+          items: { type: string, maxLength: 64 }
         weekdays:
           type: array
           maxItems: 7
@@ -1542,15 +1693,23 @@ components:
           items: { type: integer, minimum: 1, maximum: 7 }
         days_per_week: { type: integer, nullable: true, minimum: 1, maximum: 7 }
         duration_minutes: { type: integer, nullable: true, minimum: 10, maximum: 180 }
-        limitation_tags: { type: array, maxItems: 30, items: { type: string, maxLength: 64 } }
+        limitation_tags:
+          type: array
+          maxItems: 30
+          description: Limitation tags (LimitationTag). Clients ignore values they do not know.
+          items: { type: string, maxLength: 64 }
         revision: { type: integer, minimum: 1 }
     Me:
       type: object
       additionalProperties: false
-      required: [user_id, profile, preferences, training_preferences, eligibility_status, onboarding]
+      required: [user_id, profile, goal, preferences, training_preferences, eligibility_status, screening, onboarding, planning]
       properties:
         user_id: { type: string, format: uuid }
         profile: { $ref: '#/components/schemas/Profile' }
+        goal:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/Goal' }]
+          nullable: true
         preferences:
           type: object
           allOf: [{ $ref: '#/components/schemas/Preferences' }]
@@ -1563,7 +1722,17 @@ components:
           type: string
           allOf: [{ $ref: '#/components/schemas/EligibilityStatus' }]
           nullable: true
+        screening:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/ScreeningAnswers' }]
+          nullable: true
+          description: The stored screening answers, or null until the user has answered.
         onboarding: { $ref: '#/components/schemas/Onboarding' }
+        planning:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/Planning' }]
+          nullable: true
+          description: Null until onboarding is completed.
       example:
         user_id: 0d1f8a52-6f2b-4b8e-9a51-6f0f3b0f9a77
         profile:
@@ -1571,14 +1740,18 @@ components:
           age_years: null
           calculation_sex: null
           height_cm: null
+          weight_kg: null
           activity_band: null
           timezone: UTC
           unit_system: metric
           revision: 1
+        goal: null
         preferences: null
         training_preferences: null
         eligibility_status: null
+        screening: null
         onboarding: { status: not_started, step: null }
+        planning: null
     MeResponse:
       type: object
       additionalProperties: false
@@ -1586,6 +1759,65 @@ components:
       properties:
         data: { $ref: '#/components/schemas/Me' }
         meta: { $ref: '#/components/schemas/Meta' }
+    Goal:
+      type: object
+      additionalProperties: false
+      required: [goal_type, target_weight_kg]
+      properties:
+        goal_type: { $ref: '#/components/schemas/GoalType' }
+        target_weight_kg: { type: number, nullable: true, minimum: 20, maximum: 400 }
+    ScreeningAnswer:
+      type: string
+      enum: ['yes', 'no', prefer_not_to_say]
+    ScreeningAnswers:
+      type: object
+      additionalProperties: false
+      description: |
+        Minimal eligibility screening (blueprint §1). Only these three answers are stored. A "yes" or a
+        declined answer means automated plans are not generated; tracking features stay available.
+      required: [pregnancy_or_breastfeeding, eating_disorder_concern, medical_diet_condition]
+      properties:
+        pregnancy_or_breastfeeding: { $ref: '#/components/schemas/ScreeningAnswer' }
+        eating_disorder_concern: { $ref: '#/components/schemas/ScreeningAnswer' }
+        medical_diet_condition: { $ref: '#/components/schemas/ScreeningAnswer' }
+    PlanningStatus:
+      type: string
+      enum: [requested, unavailable_tracking_only, unavailable_needs_review, unavailable_policy]
+      description: |
+        requested: a generation request exists (poll `GET /v1/jobs/{id}`).
+        unavailable_tracking_only / unavailable_needs_review: eligibility excludes automated plans.
+        unavailable_policy: eligible, but no approved target policy is configured for this environment.
+    Planning:
+      type: object
+      additionalProperties: false
+      required: [status, job_id]
+      properties:
+        status: { $ref: '#/components/schemas/PlanningStatus' }
+        job_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The initial diet-plan generation request, when status is requested.
+    AllergyTag:
+      type: string
+      description: Provisional vocabulary (docs/decisions.md D-020). Not a medical allergy list.
+      enum: [gluten, crustacean, milk, egg, fish, peanut, tree_nut, soy, sesame]
+    ExclusionTag:
+      type: string
+      description: Provisional vocabulary (D-020). Foods the user does not eat for non-allergy reasons.
+      enum: [beef, pork, mutton, chicken, seafood, onion_garlic, root_vegetables, mushroom, alcohol]
+    CuisineTag:
+      type: string
+      description: Provisional vocabulary (D-020).
+      enum: [north_indian, south_indian, east_indian, west_indian, indo_chinese, continental]
+    EquipmentTag:
+      type: string
+      description: Provisional vocabulary (D-020); refined with the exercise catalog in M7.
+      enum: [bodyweight, dumbbells, barbell, kettlebell, resistance_bands, bench, pull_up_bar, machines]
+    LimitationTag:
+      type: string
+      description: Provisional vocabulary (D-020). Areas where exercises should be gentler; not a medical assessment.
+      enum: [knee, lower_back, shoulder, neck, wrist_elbow, hip, ankle_foot]
     GoalInput:
       type: object
       additionalProperties: false
@@ -1602,28 +1834,26 @@ components:
         expected_revision: { type: integer, minimum: 1 }
         display_name: { type: string, minLength: 1, maxLength: 80 }
         age_years: { type: integer, minimum: 1, maximum: 120 }
-        calculation_sex:
-          type: string
-          allOf: [{ $ref: '#/components/schemas/CalculationSex' }]
-          nullable: true
+        calculation_sex: { $ref: '#/components/schemas/CalculationSexInput' }
         height_cm: { type: number, minimum: 50, maximum: 272 }
         weight_kg: { type: number, minimum: 20, maximum: 400 }
         activity_band: { $ref: '#/components/schemas/ActivityBand' }
         timezone: { type: string, minLength: 1, maxLength: 64 }
         unit_system: { $ref: '#/components/schemas/UnitSystem' }
         primary_goal: { $ref: '#/components/schemas/GoalInput' }
+        screening: { $ref: '#/components/schemas/ScreeningAnswers' }
         onboarding_step: { $ref: '#/components/schemas/OnboardingStep' }
     PreferencesInput:
       type: object
       additionalProperties: false
       required: [expected_revision, diet_type, allergy_ids, exclusion_ids, cuisines, budget_band, cooking_time, meals_per_day]
       properties:
-        expected_revision: { type: integer, minimum: 1 }
+        expected_revision: { type: integer, minimum: 0, description: 'Current preferences revision; 0 when none exist yet.' }
         diet_type: { $ref: '#/components/schemas/DietType' }
-        allergy_ids: { type: array, maxItems: 30, uniqueItems: true, items: { type: string, maxLength: 64 } }
-        exclusion_ids: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, maxLength: 64 } }
-        dislikes: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, maxLength: 80 } }
-        cuisines: { type: array, maxItems: 20, uniqueItems: true, items: { type: string, maxLength: 64 } }
+        allergy_ids: { type: array, maxItems: 30, uniqueItems: true, items: { $ref: '#/components/schemas/AllergyTag' } }
+        exclusion_ids: { type: array, maxItems: 50, uniqueItems: true, items: { $ref: '#/components/schemas/ExclusionTag' } }
+        dislikes: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, minLength: 1, maxLength: 80 } }
+        cuisines: { type: array, maxItems: 20, uniqueItems: true, items: { $ref: '#/components/schemas/CuisineTag' } }
         budget_band: { $ref: '#/components/schemas/BudgetBand' }
         cooking_time: { $ref: '#/components/schemas/CookingTime' }
         meals_per_day: { type: integer, minimum: 1, maximum: 8 }
@@ -1639,10 +1869,10 @@ components:
       additionalProperties: false
       required: [expected_revision, experience, location, equipment_ids, weekdays, days_per_week, duration_minutes, limitation_tags]
       properties:
-        expected_revision: { type: integer, minimum: 1 }
+        expected_revision: { type: integer, minimum: 0, description: 'Current training-preferences revision; 0 when none exist yet.' }
         experience: { $ref: '#/components/schemas/ExperienceLevel' }
         location: { $ref: '#/components/schemas/TrainingLocation' }
-        equipment_ids: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, maxLength: 64 } }
+        equipment_ids: { type: array, maxItems: 50, uniqueItems: true, items: { $ref: '#/components/schemas/EquipmentTag' } }
         weekdays:
           type: array
           minItems: 1
@@ -1651,7 +1881,7 @@ components:
           items: { type: integer, minimum: 1, maximum: 7 }
         days_per_week: { type: integer, minimum: 1, maximum: 7 }
         duration_minutes: { type: integer, minimum: 10, maximum: 180 }
-        limitation_tags: { type: array, maxItems: 30, uniqueItems: true, items: { type: string, maxLength: 64 } }
+        limitation_tags: { type: array, maxItems: 30, uniqueItems: true, items: { $ref: '#/components/schemas/LimitationTag' } }
     TrainingPreferencesResponse:
       type: object
       additionalProperties: false
@@ -1659,12 +1889,57 @@ components:
       properties:
         data: { $ref: '#/components/schemas/TrainingPreferences' }
         meta: { $ref: '#/components/schemas/Meta' }
+    NotificationPreferences:
+      type: object
+      additionalProperties: false
+      required:
+        [revision, meal_reminders_enabled, workout_reminders_enabled, meal_reminder_time, workout_reminder_time, consent_granted_at]
+      properties:
+        revision: { type: integer, minimum: 0, description: 'Preferences revision; 0 when none exist yet.' }
+        meal_reminders_enabled: { type: boolean }
+        workout_reminders_enabled: { type: boolean }
+        meal_reminder_time:
+          type: string
+          nullable: true
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: Local 24-hour HH:MM, scheduled on the device in the profile timezone.
+        workout_reminder_time:
+          type: string
+          nullable: true
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+        consent_granted_at: { type: string, format: date-time, nullable: true }
+    NotificationPreferencesInput:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, meal_reminders_enabled, workout_reminders_enabled]
+      properties:
+        expected_revision: { type: integer, minimum: 0 }
+        meal_reminders_enabled: { type: boolean }
+        workout_reminders_enabled: { type: boolean }
+        meal_reminder_time: { type: string, nullable: true, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+        workout_reminder_time: { type: string, nullable: true, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+        consent_granted_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Send a timestamp only when the user just opted in; omit/null otherwise.
+    NotificationPreferencesResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/NotificationPreferences' }
+        meta: { $ref: '#/components/schemas/Meta' }
     ConsentType:
       type: string
       enum: [terms, privacy, health_data_processing, ai_meal_processing, progress_photo_storage]
     ConsentInput:
       type: object
       additionalProperties: false
+      description: |
+        `terms`, `privacy` and `health_data_processing` are required to complete onboarding. The
+        optional `ai_meal_processing` and `progress_photo_storage` consents are requested where they
+        are used (M4, M8), never here. Versions must be ones the server currently publishes.
       required: [consent_type, version]
       properties:
         consent_type: { $ref: '#/components/schemas/ConsentType' }
@@ -1721,19 +1996,36 @@ components:
     TargetSnapshot:
       type: object
       additionalProperties: false
-      required: [id, profile_revision, policy_version, method, method_reference, eligibility, estimated_energy_kcal, targets, valid_from]
+      required: [id, profile_revision, policy_version, policy_status, method, method_reference, eligibility, basis, estimated_energy_kcal, targets, warnings, valid_from]
       properties:
         id: { type: string, format: uuid }
         profile_revision: { type: integer, minimum: 1 }
         policy_version: { type: string }
+        policy_status:
+          type: string
+          enum: [test, approved]
+          description: |
+            `test` means a development placeholder policy: the numbers are not reviewed and must never
+            be presented as medical advice. Only `approved` policies may drive production planning.
         method: { type: string, enum: [policy, user_override] }
         method_reference: { type: string, nullable: true }
         eligibility: { $ref: '#/components/schemas/EligibilityStatus' }
+        basis:
+          type: string
+          enum: [point, range, not_calculated]
+          description: |
+            point: one energy target. range: the calculation sex was declined, so only an energy range
+            is offered and energy-dependent targets are null. not_calculated: eligibility excludes
+            automated planning, so no targets exist.
         estimated_energy_kcal:
           type: object
           allOf: [{ $ref: '#/components/schemas/IntRange' }]
           nullable: true
         targets: { $ref: '#/components/schemas/MacroTargets' }
+        warnings:
+          type: array
+          maxItems: 10
+          items: { type: string, enum: [energy_floor_applied, macro_budget_conflict] }
         valid_from: { type: string, format: date-time }
     TargetSnapshotResponse:
       type: object
@@ -1843,11 +2135,16 @@ components:
     MealBalanceComponent:
       type: object
       additionalProperties: false
-      required: [key, score, max_score, evidence]
+      required: [key, score, max_score, band, evidence]
       properties:
         key: { type: string, enum: [protein, fibre, vegetable_fruit, variety] }
         score: { type: number, nullable: true, minimum: 0, maximum: 25 }
         max_score: { type: integer, minimum: 25, maximum: 25, description: Each component is capped at 25 in policy v1. }
+        band:
+          type: string
+          nullable: true
+          enum: [low, adequate, good]
+          description: Qualitative read of this component (M5 per-nutrient indicator), null only when score is null.
         evidence: { type: object, additionalProperties: true }
     MealBalance:
       type: object
@@ -2111,10 +2408,26 @@ components:
         reason: { type: string, maxLength: 300 }
         projected: { $ref: '#/components/schemas/ProjectedScenario' }
         requires_confirmation: { type: boolean, description: Always true; a fix never applies without user confirmation. }
+    AfterChangesScenario:
+      type: object
+      additionalProperties: false
+      description: >-
+        What the meal's totals and Meal Balance would become if every suggested fix were applied
+        together. `meal_balance.score` is null (per MealBalance's existing convention) whenever any
+        part of the combined scenario cannot be calculated from complete catalog data — it is never
+        estimated. Projected, not actual intake, per blueprint §7.
+      required: [totals, meal_balance, assumptions]
+      properties:
+        totals: { $ref: '#/components/schemas/NutrientTotals' }
+        meal_balance: { $ref: '#/components/schemas/MealBalance' }
+        assumptions:
+          type: array
+          maxItems: 10
+          items: { type: string, maxLength: 300 }
     PlateFixes:
       type: object
       additionalProperties: false
-      required: [scan_id, revision, fixes]
+      required: [scan_id, revision, fixes, after_changes]
       properties:
         scan_id: { type: string, format: uuid }
         revision: { type: integer, minimum: 1 }
@@ -2122,6 +2435,7 @@ components:
           type: array
           maxItems: 3
           items: { $ref: '#/components/schemas/PlateAction' }
+        after_changes: { $ref: '#/components/schemas/AfterChangesScenario' }
     PlateFixesResponse:
       type: object
       additionalProperties: false
@@ -2406,11 +2720,34 @@ components:
       properties:
         expected_revision: { type: integer, minimum: 1 }
         candidate_id: { type: string, maxLength: 64 }
+    NextMealSource:
+      type: string
+      enum: [plan, catalog]
+      description: plan means this option fills an existing slot in the active diet plan (swap-able); catalog means a standalone suggestion.
     NextMealOption:
       type: object
       additionalProperties: false
-      required: [recipe, portions, nutrition, reason]
+      required: [source, plan_meal_id, plan_meal_revision, candidate_id, recipe, portions, nutrition, reason]
       properties:
+        source: { $ref: '#/components/schemas/NextMealSource' }
+        plan_meal_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Non-null means this option can be swapped into that plan slot (send it back as
+            target_plan_meal_id). An alternative to an already-planned slot carries the SAME
+            plan_meal_id as the plan option, since swapping it in targets that slot. Null means there
+            is no plan slot to swap into; use the add action instead.
+        plan_meal_revision:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: expected_revision to send with a swap action targeting plan_meal_id. Null iff plan_meal_id is null.
+        candidate_id:
+          type: string
+          maxLength: 64
+          description: Echo this back as nextMealAction's candidate_id to add/swap this option.
         recipe: { $ref: '#/components/schemas/RecipeRef' }
         portions:
           type: array
@@ -2438,6 +2775,41 @@ components:
       properties:
         data: { $ref: '#/components/schemas/NextMeal' }
         meta: { $ref: '#/components/schemas/Meta' }
+    NextMealActionType:
+      type: string
+      enum: [add, swap, dismiss]
+    NextMealActionRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        candidate_id is required for add/swap (from the chosen NextMealOption). target_plan_meal_id
+        and expected_revision are required for swap (the existing plan slot being replaced).
+      required: [date, slot, action]
+      properties:
+        date: { type: string, format: date }
+        slot: { $ref: '#/components/schemas/MealSlot' }
+        action: { $ref: '#/components/schemas/NextMealActionType' }
+        candidate_id: { type: string, maxLength: 64, nullable: true }
+        target_plan_meal_id: { type: string, format: uuid, nullable: true }
+        expected_revision: { type: integer, minimum: 1, nullable: true }
+    NextMealActionResult:
+      type: object
+      additionalProperties: false
+      required: [action, plan_meal, dismissed]
+      properties:
+        action: { $ref: '#/components/schemas/NextMealActionType' }
+        plan_meal:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/PlanMeal' }]
+          nullable: true
+        dismissed: { type: boolean }
+    NextMealActionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/NextMealActionResult' }
+        meta: { $ref: '#/components/schemas/Meta' }
     Insight:
       type: object
       additionalProperties: false
@@ -2449,12 +2821,26 @@ components:
     Insights:
       type: object
       additionalProperties: false
-      required: [period_start, period_end, logged_meals, days_with_logs, insights, focus]
+      required:
+        [period_start, period_end, logged_meals, days_with_logs, usable_days, excluded_days, coverage_uncertain, insights, focus]
       properties:
         period_start: { type: string, format: date }
         period_end: { type: string, format: date }
         logged_meals: { type: integer, minimum: 0 }
         days_with_logs: { type: integer, minimum: 0, maximum: 7 }
+        usable_days:
+          type: integer
+          minimum: 0
+          maximum: 7
+          description: Days with logged meals AND complete nutrition coverage; the denominator of any average shown.
+        excluded_days:
+          type: array
+          maxItems: 7
+          items: { type: string, format: date }
+          description: Dates left out of the average because nothing was logged or coverage was incomplete.
+        coverage_uncertain:
+          type: boolean
+          description: True when at least one day in the window was excluded from the average.
         insights:
           type: array
           maxItems: 3
@@ -2701,22 +3087,60 @@ components:
       properties:
         date: { type: string, format: date }
         weight_kg: { type: number }
+    AdherenceSummary:
+      type: object
+      additionalProperties: false
+      required: [plan_active, planned, logged]
+      description: >-
+        Honest, data-only adherence. When no plan is active, planned/logged are null (never 0) so a
+        missing plan is never mistaken for a real zero (docs/decisions.md D-030).
+      properties:
+        plan_active: { type: boolean }
+        planned: { type: integer, minimum: 0, nullable: true }
+        logged: { type: integer, minimum: 0, nullable: true }
     Progress:
       type: object
       additionalProperties: false
-      required: [period_start, period_end, weight_points, meal_logged_days, workouts_completed, workouts_scheduled_elapsed]
+      required:
+        [
+          period_start,
+          period_end,
+          weight_points,
+          starting_weight_kg,
+          current_weight_kg,
+          goal_weight_kg,
+          meal_logged_days,
+          diet_adherence,
+          workouts_completed,
+          workouts_scheduled_elapsed,
+          workout_adherence,
+        ]
       properties:
         period_start: { type: string, format: date }
         period_end: { type: string, format: date }
         weight_points:
           type: array
           items: { $ref: '#/components/schemas/WeightPoint' }
+        starting_weight_kg:
+          type: number
+          nullable: true
+          description: The user's first-ever recorded weight (weight-history entry, or the onboarding value).
+        current_weight_kg:
+          type: number
+          nullable: true
+          description: The latest weight-history entry, falling back to the profile's recorded weight.
+        goal_weight_kg:
+          type: number
+          nullable: true
+          description: The active goal's target weight, when one is set.
         meal_logged_days: { type: integer, minimum: 0 }
+        diet_adherence: { $ref: '#/components/schemas/AdherenceSummary' }
         workouts_completed: { type: integer, minimum: 0 }
         workouts_scheduled_elapsed:
           type: integer
           minimum: 0
           description: Scheduled sessions already elapsed; excludes future sessions and rest days.
+        workout_adherence: { $ref: '#/components/schemas/AdherenceSummary' }
     ProgressResponse:
       type: object
       additionalProperties: false

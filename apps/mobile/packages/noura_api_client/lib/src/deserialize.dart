@@ -1,6 +1,8 @@
 import 'package:noura_api_client/src/model/account_export.dart';
 import 'package:noura_api_client/src/model/action_proposal.dart';
 import 'package:noura_api_client/src/model/action_proposal_response.dart';
+import 'package:noura_api_client/src/model/adherence_summary.dart';
+import 'package:noura_api_client/src/model/after_changes_scenario.dart';
 import 'package:noura_api_client/src/model/analyzed_item.dart';
 import 'package:noura_api_client/src/model/coach_card.dart';
 import 'package:noura_api_client/src/model/coach_message.dart';
@@ -41,6 +43,7 @@ import 'package:noura_api_client/src/model/food.dart';
 import 'package:noura_api_client/src/model/food_list.dart';
 import 'package:noura_api_client/src/model/food_list_response.dart';
 import 'package:noura_api_client/src/model/generate_plan_request.dart';
+import 'package:noura_api_client/src/model/goal.dart';
 import 'package:noura_api_client/src/model/goal_input.dart';
 import 'package:noura_api_client/src/model/health_check.dart';
 import 'package:noura_api_client/src/model/health_response.dart';
@@ -76,8 +79,14 @@ import 'package:noura_api_client/src/model/media_download.dart';
 import 'package:noura_api_client/src/model/media_download_response.dart';
 import 'package:noura_api_client/src/model/meta.dart';
 import 'package:noura_api_client/src/model/next_meal.dart';
+import 'package:noura_api_client/src/model/next_meal_action_request.dart';
+import 'package:noura_api_client/src/model/next_meal_action_response.dart';
+import 'package:noura_api_client/src/model/next_meal_action_result.dart';
 import 'package:noura_api_client/src/model/next_meal_option.dart';
 import 'package:noura_api_client/src/model/next_meal_response.dart';
+import 'package:noura_api_client/src/model/notification_preferences.dart';
+import 'package:noura_api_client/src/model/notification_preferences_input.dart';
+import 'package:noura_api_client/src/model/notification_preferences_response.dart';
 import 'package:noura_api_client/src/model/number_range.dart';
 import 'package:noura_api_client/src/model/nutrient_totals.dart';
 import 'package:noura_api_client/src/model/nutrients.dart';
@@ -91,6 +100,7 @@ import 'package:noura_api_client/src/model/plan_day.dart';
 import 'package:noura_api_client/src/model/plan_meal.dart';
 import 'package:noura_api_client/src/model/plan_meal_preview.dart';
 import 'package:noura_api_client/src/model/plan_meal_response.dart';
+import 'package:noura_api_client/src/model/planning.dart';
 import 'package:noura_api_client/src/model/plate_action.dart';
 import 'package:noura_api_client/src/model/plate_fixes.dart';
 import 'package:noura_api_client/src/model/plate_fixes_response.dart';
@@ -121,6 +131,7 @@ import 'package:noura_api_client/src/model/revenue_cat_webhook_request.dart';
 import 'package:noura_api_client/src/model/revenue_cat_webhook_request_event.dart';
 import 'package:noura_api_client/src/model/revision_request.dart';
 import 'package:noura_api_client/src/model/safe_error.dart';
+import 'package:noura_api_client/src/model/screening_answers.dart';
 import 'package:noura_api_client/src/model/send_coach_message_request.dart';
 import 'package:noura_api_client/src/model/serving_conversion.dart';
 import 'package:noura_api_client/src/model/serving_input.dart';
@@ -188,10 +199,18 @@ ReturnType deserialize<ReturnType, BaseType>(
       return ActionProposalResponse.fromJson(value as Map<String, dynamic>)
           as ReturnType;
     case 'ActivityBand':
+    case 'AdherenceSummary':
+      return AdherenceSummary.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'AfterChangesScenario':
+      return AfterChangesScenario.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'AllergyTag':
     case 'AnalyzedItem':
       return AnalyzedItem.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'BudgetBand':
     case 'CalculationSex':
+    case 'CalculationSexInput':
     case 'CoachCard':
       return CoachCard.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'CoachMessage':
@@ -242,6 +261,7 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'CreateWorkoutLogRequest':
       return CreateWorkoutLogRequest.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'CuisineTag':
     case 'DeleteAccountRequest':
       return DeleteAccountRequest.fromJson(value as Map<String, dynamic>)
           as ReturnType;
@@ -270,12 +290,14 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'EntitlementsResponse':
       return EntitlementsResponse.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'EquipmentTag':
     case 'ErrorBody':
       return ErrorBody.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ErrorCode':
     case 'ErrorResponse':
       return ErrorResponse.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'ExclusionTag':
     case 'ExerciseRef':
       return ExerciseRef.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'ExperienceLevel':
@@ -302,6 +324,8 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'GeneratePlanRequest':
       return GeneratePlanRequest.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'Goal':
+      return Goal.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GoalInput':
       return GoalInput.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'GoalType':
@@ -338,6 +362,7 @@ ReturnType deserialize<ReturnType, BaseType>(
       return JobResponse.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'JobStatus':
     case 'JobType':
+    case 'LimitationTag':
     case 'MacroTargets':
       return MacroTargets.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'Me':
@@ -393,11 +418,35 @@ ReturnType deserialize<ReturnType, BaseType>(
       return Meta.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'NextMeal':
       return NextMeal.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'NextMealActionRequest':
+      return NextMealActionRequest.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'NextMealActionResponse':
+      return NextMealActionResponse.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'NextMealActionResult':
+      return NextMealActionResult.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'NextMealActionType':
     case 'NextMealOption':
       return NextMealOption.fromJson(value as Map<String, dynamic>)
           as ReturnType;
     case 'NextMealResponse':
       return NextMealResponse.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'NextMealSource':
+    case 'NotificationPreferences':
+      return NotificationPreferences.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
+    case 'NotificationPreferencesInput':
+      return NotificationPreferencesInput.fromJson(
+            value as Map<String, dynamic>,
+          )
+          as ReturnType;
+    case 'NotificationPreferencesResponse':
+      return NotificationPreferencesResponse.fromJson(
+            value as Map<String, dynamic>,
+          )
           as ReturnType;
     case 'NumberRange':
       return NumberRange.fromJson(value as Map<String, dynamic>) as ReturnType;
@@ -437,6 +486,9 @@ ReturnType deserialize<ReturnType, BaseType>(
     case 'PlanMealResponse':
       return PlanMealResponse.fromJson(value as Map<String, dynamic>)
           as ReturnType;
+    case 'Planning':
+      return Planning.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'PlanningStatus':
     case 'PlateAction':
       return PlateAction.fromJson(value as Map<String, dynamic>) as ReturnType;
     case 'PlateFixes':
@@ -518,6 +570,10 @@ ReturnType deserialize<ReturnType, BaseType>(
           as ReturnType;
     case 'SafeError':
       return SafeError.fromJson(value as Map<String, dynamic>) as ReturnType;
+    case 'ScreeningAnswer':
+    case 'ScreeningAnswers':
+      return ScreeningAnswers.fromJson(value as Map<String, dynamic>)
+          as ReturnType;
     case 'SendCoachMessageRequest':
       return SendCoachMessageRequest.fromJson(value as Map<String, dynamic>)
           as ReturnType;

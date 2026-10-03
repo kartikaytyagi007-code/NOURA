@@ -29,9 +29,13 @@ lib/src/model/account_export.dart
 lib/src/model/action_proposal.dart
 lib/src/model/action_proposal_response.dart
 lib/src/model/activity_band.dart
+lib/src/model/adherence_summary.dart
+lib/src/model/after_changes_scenario.dart
+lib/src/model/allergy_tag.dart
 lib/src/model/analyzed_item.dart
 lib/src/model/budget_band.dart
 lib/src/model/calculation_sex.dart
+lib/src/model/calculation_sex_input.dart
 lib/src/model/coach_card.dart
 lib/src/model/coach_message.dart
 lib/src/model/coach_message_accepted.dart
@@ -51,6 +55,7 @@ lib/src/model/create_meal_scan_request.dart
 lib/src/model/create_progress_photo_request.dart
 lib/src/model/create_weight_log_request.dart
 lib/src/model/create_workout_log_request.dart
+lib/src/model/cuisine_tag.dart
 lib/src/model/delete_account_request.dart
 lib/src/model/deleted.dart
 lib/src/model/deleted_response.dart
@@ -63,9 +68,11 @@ lib/src/model/eligibility_status.dart
 lib/src/model/entitlement.dart
 lib/src/model/entitlements.dart
 lib/src/model/entitlements_response.dart
+lib/src/model/equipment_tag.dart
 lib/src/model/error_body.dart
 lib/src/model/error_code.dart
 lib/src/model/error_response.dart
+lib/src/model/exclusion_tag.dart
 lib/src/model/exercise_ref.dart
 lib/src/model/experience_level.dart
 lib/src/model/export_accepted.dart
@@ -77,6 +84,7 @@ lib/src/model/food.dart
 lib/src/model/food_list.dart
 lib/src/model/food_list_response.dart
 lib/src/model/generate_plan_request.dart
+lib/src/model/goal.dart
 lib/src/model/goal_input.dart
 lib/src/model/goal_type.dart
 lib/src/model/health_check.dart
@@ -95,6 +103,7 @@ lib/src/model/job_accepted_response.dart
 lib/src/model/job_response.dart
 lib/src/model/job_status.dart
 lib/src/model/job_type.dart
+lib/src/model/limitation_tag.dart
 lib/src/model/macro_targets.dart
 lib/src/model/me.dart
 lib/src/model/me_response.dart
@@ -119,8 +128,16 @@ lib/src/model/media_download_response.dart
 lib/src/model/media_purpose.dart
 lib/src/model/meta.dart
 lib/src/model/next_meal.dart
+lib/src/model/next_meal_action_request.dart
+lib/src/model/next_meal_action_response.dart
+lib/src/model/next_meal_action_result.dart
+lib/src/model/next_meal_action_type.dart
 lib/src/model/next_meal_option.dart
 lib/src/model/next_meal_response.dart
+lib/src/model/next_meal_source.dart
+lib/src/model/notification_preferences.dart
+lib/src/model/notification_preferences_input.dart
+lib/src/model/notification_preferences_response.dart
 lib/src/model/number_range.dart
 lib/src/model/nutrient_totals.dart
 lib/src/model/nutrients.dart
@@ -138,6 +155,8 @@ lib/src/model/plan_day.dart
 lib/src/model/plan_meal.dart
 lib/src/model/plan_meal_preview.dart
 lib/src/model/plan_meal_response.dart
+lib/src/model/planning.dart
+lib/src/model/planning_status.dart
 lib/src/model/plate_action.dart
 lib/src/model/plate_fixes.dart
 lib/src/model/plate_fixes_response.dart
@@ -168,6 +187,8 @@ lib/src/model/revenue_cat_webhook_request.dart
 lib/src/model/revenue_cat_webhook_request_event.dart
 lib/src/model/revision_request.dart
 lib/src/model/safe_error.dart
+lib/src/model/screening_answer.dart
+lib/src/model/screening_answers.dart
 lib/src/model/send_coach_message_request.dart
 lib/src/model/serving_conversion.dart
 lib/src/model/serving_input.dart

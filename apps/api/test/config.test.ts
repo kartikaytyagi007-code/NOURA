@@ -1,3 +1,7 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { TEST_TARGET_POLICY } from '@noura/domain';
 import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig } from '../src/config.js';
 
@@ -17,6 +21,7 @@ const production = {
   BILLING_PROVIDER: 'revenuecat',
   REVENUECAT_SECRET_API_KEY: 'placeholder-rc-key',
   REVENUECAT_WEBHOOK_AUTH: 'placeholder-webhook-authorization',
+  SUPABASE_SERVICE_ROLE_KEY: 'placeholder-service-role-key',
 };
 
 describe('loadConfig', () => {
@@ -76,5 +81,54 @@ describe('loadConfig', () => {
 
   it('rejects an unknown APP_ENV', () => {
     expect(() => loadConfig({ ...base, APP_ENV: 'prod' })).toThrow(/APP_ENV/);
+  });
+
+  describe('planning policy', () => {
+    const write = (policy: unknown): string => {
+      const file = join(mkdtempSync(join(tmpdir(), 'noura-policy-')), 'policy.json');
+      writeFileSync(file, JSON.stringify(policy));
+      return file;
+    };
+    const approved = {
+      ...TEST_TARGET_POLICY,
+      status: 'approved',
+      approval: {
+        reviewer: 'Placeholder Reviewer',
+        approved_on: '2026-10-01',
+        reference: 'TEST-REF',
+      },
+    };
+
+    it('defaults to the labelled test policy in development and test only', () => {
+      expect(loadConfig(base).planningPolicy?.status).toBe('test');
+      expect(loadConfig({ ...base, APP_ENV: 'test' }).planningPolicy?.status).toBe('test');
+      expect(loadConfig(production).planningPolicy).toBeNull();
+      expect(loadConfig({ ...production, APP_ENV: 'staging' }).planningPolicy).toBeNull();
+    });
+
+    it('loads an approved policy file in a deployed environment', () => {
+      const config = loadConfig({ ...production, PLANNING_POLICY_FILE: write(approved) });
+      expect(config.planningPolicy?.status).toBe('approved');
+    });
+
+    it('refuses a test-status policy in staging and production', () => {
+      expect(() =>
+        loadConfig({ ...production, PLANNING_POLICY_FILE: write(TEST_TARGET_POLICY) }),
+      ).toThrow(/test policy is not allowed/);
+    });
+
+    it('rejects unreadable or invalid files without echoing their content', () => {
+      expect(() =>
+        loadConfig({ ...base, PLANNING_POLICY_FILE: '/nonexistent/policy.json' }),
+      ).toThrow(/PLANNING_POLICY_FILE/);
+      const bad = { ...approved, approval: null, secret_note: 'do-not-echo-me' };
+      try {
+        loadConfig({ ...base, PLANNING_POLICY_FILE: write(bad) });
+        expect.unreachable();
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigError);
+        expect((error as Error).message).not.toContain('do-not-echo-me');
+      }
+    });
   });
 });

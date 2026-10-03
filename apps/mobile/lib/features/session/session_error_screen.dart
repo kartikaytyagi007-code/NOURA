@@ -22,7 +22,7 @@ class SessionErrorScreen extends ConsumerWidget {
           title: offline ? "You're offline" : "We couldn't load your account",
           message: failure?.message ?? 'Something went wrong. Please try again.',
           actionLabel: 'Try again',
-          onAction: () => ref.invalidate(sessionProfileProvider),
+          onAction: () => ref.invalidate(meControllerProvider),
           secondaryLabel: 'Sign out',
           onSecondary: () => ref.read(authRepositoryProvider).signOut(),
         ),

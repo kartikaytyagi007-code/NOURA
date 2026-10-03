@@ -18,7 +18,7 @@ class InsightsApi {
   const InsightsApi(this._dio);
 
   /// Seven-day nutrition patterns.
-  ///
+  /// Daily and seven-day nutrition-pattern summaries from recorded meals (blueprint §10, §16 M6). A protein/fibre gap is identified only when the underlying data supports it: a day with no logs or incomplete nutrition coverage is excluded from the seven-day average and named in &#x60;excluded_days&#x60;/&#x60;coverage_uncertain&#x60; rather than silently counted as zero, and a gap is only ever reported once enough usable days exist to support the conclusion.
   ///
   /// Parameters:
   /// * [period]

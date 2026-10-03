@@ -34,6 +34,10 @@ async function main(): Promise<void> {
       app_env: config.appEnv,
       ai_provider: config.ai.provider,
       billing_provider: config.billing.provider,
+      // Policy identity only, never values. null means automated planning is unavailable here.
+      planning_policy: config.planningPolicy
+        ? { version: config.planningPolicy.version, status: config.planningPolicy.status }
+        : null,
     },
     config.ai.provider === 'mock' || config.billing.provider === 'mock'
       ? 'API started with DEVELOPMENT MOCK providers'

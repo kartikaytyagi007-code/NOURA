@@ -3,8 +3,11 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:noura_api_client/src/model/allergy_tag.dart';
 import 'package:noura_api_client/src/model/cooking_time.dart';
+import 'package:noura_api_client/src/model/cuisine_tag.dart';
 import 'package:noura_api_client/src/model/diet_type.dart';
+import 'package:noura_api_client/src/model/exclusion_tag.dart';
 import 'package:noura_api_client/src/model/budget_band.dart';
 import 'package:copy_with_extension/copy_with_extension.dart';
 import 'package:json_annotation/json_annotation.dart';
@@ -41,7 +44,8 @@ class PreferencesInput {
     required this.mealsPerDay,
   });
 
-  // minimum: 1
+  /// Current preferences revision; 0 when none exist yet.
+  // minimum: 0
   @JsonKey(name: r'expected_revision', required: true, includeIfNull: false)
   final int expectedRevision;
 
@@ -49,16 +53,16 @@ class PreferencesInput {
   final DietType dietType;
 
   @JsonKey(name: r'allergy_ids', required: true, includeIfNull: false)
-  final Set<String> allergyIds;
+  final Set<AllergyTag> allergyIds;
 
   @JsonKey(name: r'exclusion_ids', required: true, includeIfNull: false)
-  final Set<String> exclusionIds;
+  final Set<ExclusionTag> exclusionIds;
 
   @JsonKey(name: r'dislikes', required: false, includeIfNull: false)
   final Set<String>? dislikes;
 
   @JsonKey(name: r'cuisines', required: true, includeIfNull: false)
-  final Set<String> cuisines;
+  final Set<CuisineTag> cuisines;
 
   @JsonKey(name: r'budget_band', required: true, includeIfNull: false)
   final BudgetBand budgetBand;

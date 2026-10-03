@@ -13,6 +13,8 @@ abstract class _$MealBalanceComponentCWProxy {
 
   MealBalanceComponent maxScore(int maxScore);
 
+  MealBalanceComponent band(MealBalanceComponentBandEnum? band);
+
   MealBalanceComponent evidence(Map<String, Object> evidence);
 
   /// This function **does support** nullification of nullable fields. All `null` values passed to `non-nullable` fields will be ignored. You can also use `MealBalanceComponent(...).copyWith.fieldName(...)` to override fields one at a time with nullification support.
@@ -25,6 +27,7 @@ abstract class _$MealBalanceComponentCWProxy {
     MealBalanceComponentKeyEnum key,
     num? score,
     int maxScore,
+    MealBalanceComponentBandEnum? band,
     Map<String, Object> evidence,
   });
 }
@@ -46,6 +49,10 @@ class _$MealBalanceComponentCWProxyImpl
   MealBalanceComponent maxScore(int maxScore) => this(maxScore: maxScore);
 
   @override
+  MealBalanceComponent band(MealBalanceComponentBandEnum? band) =>
+      this(band: band);
+
+  @override
   MealBalanceComponent evidence(Map<String, Object> evidence) =>
       this(evidence: evidence);
 
@@ -60,6 +67,7 @@ class _$MealBalanceComponentCWProxyImpl
     Object? key = const $CopyWithPlaceholder(),
     Object? score = const $CopyWithPlaceholder(),
     Object? maxScore = const $CopyWithPlaceholder(),
+    Object? band = const $CopyWithPlaceholder(),
     Object? evidence = const $CopyWithPlaceholder(),
   }) {
     return MealBalanceComponent(
@@ -75,6 +83,10 @@ class _$MealBalanceComponentCWProxyImpl
           ? _value.maxScore
           // ignore: cast_nullable_to_non_nullable
           : maxScore as int,
+      band: band == const $CopyWithPlaceholder()
+          ? _value.band
+          // ignore: cast_nullable_to_non_nullable
+          : band as MealBalanceComponentBandEnum?,
       evidence: evidence == const $CopyWithPlaceholder()
           ? _value.evidence
           // ignore: cast_nullable_to_non_nullable
@@ -99,7 +111,7 @@ MealBalanceComponent _$MealBalanceComponentFromJson(
 ) => $checkedCreate('MealBalanceComponent', json, ($checkedConvert) {
   $checkKeys(
     json,
-    requiredKeys: const ['key', 'score', 'max_score', 'evidence'],
+    requiredKeys: const ['key', 'score', 'max_score', 'band', 'evidence'],
   );
   final val = MealBalanceComponent(
     key: $checkedConvert(
@@ -108,6 +120,10 @@ MealBalanceComponent _$MealBalanceComponentFromJson(
     ),
     score: $checkedConvert('score', (v) => v as num?),
     maxScore: $checkedConvert('max_score', (v) => (v as num).toInt()),
+    band: $checkedConvert(
+      'band',
+      (v) => $enumDecodeNullable(_$MealBalanceComponentBandEnumEnumMap, v),
+    ),
     evidence: $checkedConvert(
       'evidence',
       (v) =>
@@ -123,6 +139,7 @@ Map<String, dynamic> _$MealBalanceComponentToJson(
   'key': _$MealBalanceComponentKeyEnumEnumMap[instance.key]!,
   'score': instance.score,
   'max_score': instance.maxScore,
+  'band': _$MealBalanceComponentBandEnumEnumMap[instance.band],
   'evidence': instance.evidence,
 };
 
@@ -131,4 +148,10 @@ const _$MealBalanceComponentKeyEnumEnumMap = {
   MealBalanceComponentKeyEnum.fibre: 'fibre',
   MealBalanceComponentKeyEnum.vegetableFruit: 'vegetable_fruit',
   MealBalanceComponentKeyEnum.variety: 'variety',
+};
+
+const _$MealBalanceComponentBandEnumEnumMap = {
+  MealBalanceComponentBandEnum.low: 'low',
+  MealBalanceComponentBandEnum.adequate: 'adequate',
+  MealBalanceComponentBandEnum.good: 'good',
 };

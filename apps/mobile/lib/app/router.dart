@@ -11,12 +11,23 @@ import '../features/auth/presentation/update_password_screen.dart';
 import '../features/auth/presentation/verify_email_screen.dart';
 import '../features/auth/presentation/welcome_screen.dart';
 import '../features/coach/coach_screen.dart';
+import '../features/diet/diet_plan_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/meals/meal_scan_screen.dart';
 import '../features/meals/meals_screen.dart';
+import '../features/meals/next_meal_screen.dart';
+import '../features/meals/nutrition_insights_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/progress/photo_comparison_screen.dart';
+import '../features/progress/progress_photos_screen.dart';
 import '../features/progress/progress_screen.dart';
+import '../features/progress/weight_history_screen.dart';
 import '../features/session/session_error_screen.dart';
 import '../features/session/splash_screen.dart';
+import '../features/settings/account_data_screen.dart';
+import '../features/settings/billing_screen.dart';
+import '../features/settings/profile_settings_pages.dart';
+import '../features/settings/reminders_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/workouts/workout_screen.dart';
 import 'route_guard.dart';
@@ -61,7 +72,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.updatePassword, builder: (_, _) => const UpdatePasswordScreen()),
       GoRoute(path: Routes.onboarding, builder: (_, _) => const OnboardingScreen()),
       GoRoute(path: Routes.sessionError, builder: (_, _) => const SessionErrorScreen()),
-      GoRoute(path: Routes.settings, builder: (_, _) => const SettingsScreen()),
+      GoRoute(
+        path: Routes.settings,
+        builder: (_, _) => const SettingsScreen(),
+        routes: [
+          GoRoute(path: 'profile', builder: (_, _) => const ProfileEditPage()),
+          GoRoute(path: 'goal', builder: (_, _) => const GoalEditPage()),
+          GoRoute(path: 'preferences', builder: (_, _) => const PreferencesEditPage()),
+          GoRoute(path: 'training', builder: (_, _) => const TrainingEditPage()),
+          GoRoute(path: 'eligibility', builder: (_, _) => const EligibilityEditPage()),
+          GoRoute(path: 'reminders', builder: (_, _) => const RemindersScreen()),
+          GoRoute(path: 'billing', builder: (_, _) => const BillingScreen()),
+          GoRoute(path: 'account-data', builder: (_, _) => const AccountDataScreen()),
+        ],
+      ),
       StatefulShellRoute.indexedStack(
         builder: (_, _, shell) => AppShell(navigationShell: shell),
         branches: [
@@ -69,7 +93,18 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [GoRoute(path: Routes.home, builder: (_, _) => const HomeScreen())],
           ),
           StatefulShellBranch(
-            routes: [GoRoute(path: Routes.meals, builder: (_, _) => const MealsScreen())],
+            routes: [
+              GoRoute(
+                path: Routes.meals,
+                builder: (_, _) => const MealsScreen(),
+                routes: [
+                  GoRoute(path: 'diet-plan', builder: (_, _) => const DietPlanScreen()),
+                  GoRoute(path: 'scan', builder: (_, _) => const MealScanScreen()),
+                  GoRoute(path: 'next-meal', builder: (_, _) => const NextMealScreen()),
+                  GoRoute(path: 'insights', builder: (_, _) => const NutritionInsightsScreen()),
+                ],
+              ),
+            ],
           ),
           StatefulShellBranch(
             routes: [GoRoute(path: Routes.coach, builder: (_, _) => const CoachScreen())],
@@ -78,7 +113,17 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [GoRoute(path: Routes.workout, builder: (_, _) => const WorkoutScreen())],
           ),
           StatefulShellBranch(
-            routes: [GoRoute(path: Routes.progress, builder: (_, _) => const ProgressScreen())],
+            routes: [
+              GoRoute(
+                path: Routes.progress,
+                builder: (_, _) => const ProgressScreen(),
+                routes: [
+                  GoRoute(path: 'weight-history', builder: (_, _) => const WeightHistoryScreen()),
+                  GoRoute(path: 'photos', builder: (_, _) => const ProgressPhotosScreen()),
+                  GoRoute(path: 'compare', builder: (_, _) => const PhotoComparisonScreen()),
+                ],
+              ),
+            ],
           ),
         ],
       ),

@@ -38,7 +38,10 @@ class _Adapter implements HttpClientAdapter {
 }
 
 class _Auth extends MockAuthRepository {
-  _Auth() : super(initial: const SignedIn(userId: MockAuthRepository.mockUserId, email: 'a@example.com'));
+  _Auth()
+    : super(
+        initial: const SignedIn(userId: MockAuthRepository.mockUserId, email: 'a@example.com'),
+      );
   @override
   Future<String?> accessToken() async => 'token';
 }
@@ -77,7 +80,13 @@ void main() {
 
     test('restorePurchases sends an Idempotency-Key and returns the reconciled entitlements', () async {
       final adapter = _Adapter([
-        (200, {'data': {'entitlements': <Object?>[]}, 'meta': {'request_id': 'r'}}),
+        (
+          200,
+          {
+            'data': {'entitlements': <Object?>[]},
+            'meta': {'request_id': 'r'},
+          },
+        ),
       ]);
       final entitlements = await ApiBillingRepository(_client(adapter)).restorePurchases();
       expect(entitlements.entitlements, isEmpty);
@@ -152,7 +161,13 @@ void main() {
   group('ApiAccountRepository', () {
     test('requestExport is idempotent and returns the accepted job', () async {
       final adapter = _Adapter([
-        (202, {'data': {'export_id': 'exp-1', 'job_id': 'job-1'}, 'meta': {'request_id': 'r'}}),
+        (
+          202,
+          {
+            'data': {'export_id': 'exp-1', 'job_id': 'job-1'},
+            'meta': {'request_id': 'r'},
+          },
+        ),
       ]);
       final accepted = await ApiAccountRepository(_client(adapter)).requestExport();
       expect(accepted.exportId, 'exp-1');
@@ -163,7 +178,13 @@ void main() {
 
     test('deleteAccount sends the required confirmation literal', () async {
       final adapter = _Adapter([
-        (202, {'data': {'deletion_request_id': 'del-1', 'state': 'requested'}, 'meta': {'request_id': 'r'}}),
+        (
+          202,
+          {
+            'data': {'deletion_request_id': 'del-1', 'state': 'requested'},
+            'meta': {'request_id': 'r'},
+          },
+        ),
       ]);
       final accepted = await ApiAccountRepository(_client(adapter)).deleteAccount();
       expect(accepted.deletionRequestId, 'del-1');

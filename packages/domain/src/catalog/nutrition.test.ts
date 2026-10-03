@@ -38,6 +38,7 @@ describe('computeRecipeNutrition', () => {
       allergen_coverage: 'complete',
       food_group_tags: [],
       quality_flag: 'test_fixture',
+      serving_conversions: [],
     };
     const result = computeRecipeNutrition(
       { ...VEG_RICE_BOWL, ingredients: [{ food: incomplete, edible_grams: 100 }] },

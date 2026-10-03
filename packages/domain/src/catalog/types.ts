@@ -10,6 +10,12 @@ export type AllergenCoverage = 'complete' | 'partial' | 'unknown';
 export type DietType = 'vegetarian' | 'eggatarian' | 'vegan' | 'non_vegetarian';
 export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
+export interface ServingConversion {
+  unit: string;
+  grams_min: number;
+  grams_max: number;
+}
+
 export interface CatalogFood {
   id: string;
   name: string;
@@ -23,6 +29,7 @@ export interface CatalogFood {
   allergen_coverage: AllergenCoverage;
   food_group_tags: string[];
   quality_flag: QualityFlag;
+  serving_conversions: ServingConversion[];
 }
 
 export interface CatalogIngredient {

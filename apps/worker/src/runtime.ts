@@ -5,6 +5,8 @@ import {
   DEAD_LETTER_QUEUE,
   QUEUE_POLICIES,
   QUEUES,
+  createMediaStorage,
+  type MediaStorage,
   type QueueName,
   type QueuePayloads,
 } from '@noura/domain';
@@ -13,12 +15,14 @@ import { PgBoss } from 'pg-boss';
 import type { Logger } from 'pino';
 import type { WorkerConfig } from './config.js';
 import { handleDietPlanGenerate } from './handlers/diet-plan-generate.js';
+import { handleMealScanAnalyze } from './handlers/meal-scan-analyze.js';
 import { handleSystemPing } from './handlers/system-ping.js';
 import { relayGenerationRequests, startRelayLoop } from './relay.js';
 
 export interface WorkerRuntime {
   boss: PgBoss;
   ai: AiProvider;
+  media: MediaStorage;
   healthServer: Server;
   healthPort: () => number;
   stop: () => Promise<void>;
@@ -55,6 +59,17 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
     apiKey: config.ai.apiKey,
     modelId: config.ai.modelId,
   });
+  const media = createMediaStorage({
+    appEnv: config.appEnv,
+    driver: config.media.driver,
+    supabaseUrl: config.media.supabaseUrl,
+    serviceRoleKey: config.media.serviceRoleKey,
+    local: {
+      baseDir: config.media.devStorageDir,
+      publicBaseUrl: 'unused-in-worker',
+      signingSecret: config.media.devStorageSigningSecret,
+    },
+  });
 
   const boss = new PgBoss({
     connectionString: config.databaseUrl,
@@ -89,6 +104,11 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
     QUEUES.dietPlanGenerate,
     { batchSize: 1, localConcurrency: config.concurrency },
     (jobs) => handleDietPlanGenerate(jobs, jobPool, config.appEnv, log),
+  );
+  await boss.work<QueuePayloads['meal-scan.analyze']>(
+    QUEUES.mealScanAnalyze,
+    { batchSize: 1, localConcurrency: config.concurrency },
+    (jobs) => handleMealScanAnalyze(jobs, jobPool, ai, media, log),
   );
   ready = true;
 
@@ -148,6 +168,7 @@ export async function startWorker(config: WorkerConfig, log: Logger): Promise<Wo
   return {
     boss,
     ai,
+    media,
     healthServer,
     healthPort: () => (healthServer.address() as AddressInfo).port,
     stop: async () => {

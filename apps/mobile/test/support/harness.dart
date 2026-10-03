@@ -6,6 +6,7 @@ import 'package:noura/core/auth/auth_state.dart';
 import 'package:noura/core/auth/mock_auth_repository.dart';
 import 'package:noura/core/config/app_config.dart';
 import 'package:noura/core/diet/diet_repository.dart';
+import 'package:noura/core/meals/meal_scan_repository.dart';
 import 'package:noura/core/profile/profile_repository.dart';
 import 'package:noura/core/profile/session_profile.dart';
 import 'package:noura/core/providers.dart';
@@ -105,6 +106,7 @@ Future<void> pumpNoura(
   required RecordingAuthRepository auth,
   required ProfileRepository profiles,
   DietRepository? diet,
+  MealScanRepository? mealScan,
   AppConfig? config,
   Size size = const Size(1080, 2340),
 }) async {
@@ -118,6 +120,7 @@ Future<void> pumpNoura(
         authRepositoryProvider.overrideWithValue(auth),
         profileRepositoryProvider.overrideWithValue(profiles),
         if (diet != null) dietRepositoryProvider.overrideWithValue(diet),
+        if (mealScan != null) mealScanRepositoryProvider.overrideWithValue(mealScan),
       ],
       child: const NouraApp(),
     ),

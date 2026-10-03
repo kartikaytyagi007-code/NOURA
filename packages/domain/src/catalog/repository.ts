@@ -85,8 +85,59 @@ export async function loadCatalogRecipes(db: Queryable): Promise<CatalogRecipe[]
         allergen_coverage: row.allergen_coverage,
         food_group_tags: row.food_group_tags,
         quality_flag: row.food_quality_flag,
+        serving_conversions: [],
       },
     });
   }
   return [...byRecipe.values()];
+}
+
+interface FoodRow {
+  id: string;
+  name: string;
+  energy_kcal_per_100g: string | null;
+  protein_g_per_100g: string | null;
+  carbohydrate_g_per_100g: string | null;
+  fat_g_per_100g: string | null;
+  fibre_g_per_100g: string | null;
+  diet_tags: DietType[];
+  allergen_tags: string[];
+  allergen_coverage: CatalogFood['allergen_coverage'];
+  food_group_tags: string[];
+  quality_flag: CatalogFood['quality_flag'];
+  serving_conversions: CatalogFood['serving_conversions'];
+}
+
+/**
+ * Every standalone catalog food (blueprint §8: meal-scan recognition maps items onto this same
+ * catalog, never onto recipes). Read-only reference data, shared by the API and worker exactly like
+ * `loadCatalogRecipes`.
+ */
+export async function loadCatalogFoods(db: Queryable): Promise<CatalogFood[]> {
+  const { rows } = await db.query<FoodRow>(
+    `select id, name,
+            energy_kcal_per_100g::text as energy_kcal_per_100g,
+            protein_g_per_100g::text as protein_g_per_100g,
+            carbohydrate_g_per_100g::text as carbohydrate_g_per_100g,
+            fat_g_per_100g::text as fat_g_per_100g,
+            fibre_g_per_100g::text as fibre_g_per_100g,
+            diet_tags, allergen_tags, allergen_coverage, food_group_tags, quality_flag,
+            coalesce(serving_conversions, '[]'::jsonb) as serving_conversions
+       from app.foods`,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    energy_kcal_per_100g: num(row.energy_kcal_per_100g),
+    protein_g_per_100g: num(row.protein_g_per_100g),
+    carbohydrate_g_per_100g: num(row.carbohydrate_g_per_100g),
+    fat_g_per_100g: num(row.fat_g_per_100g),
+    fibre_g_per_100g: num(row.fibre_g_per_100g),
+    diet_tags: row.diet_tags,
+    allergen_tags: row.allergen_tags,
+    allergen_coverage: row.allergen_coverage,
+    food_group_tags: row.food_group_tags,
+    quality_flag: row.quality_flag,
+    serving_conversions: row.serving_conversions,
+  }));
 }

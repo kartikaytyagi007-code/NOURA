@@ -504,3 +504,105 @@ a provisional engineering bound (plausible serving sizes), not a clinical or rev
 tolerance; a reviewer-set tolerance (the ticket proposed ±10% of the per-meal target as a starting
 point) is a release-gate item alongside the target policy itself (D-018) and should replace this
 clamp, or add an explicit tolerance check on top of it, once set.
+
+## D-026 · Meal photo scanning: storage, recognition adapter and honest catalog resolution (M4)
+
+**Scope.** Private photo upload, async recognition, a user review/correction step, and manual meal
+logging (blueprint §8). No part of this generates or guesses nutrition: the AI provider only ever
+identifies foods and estimates portions; nutrition is computed exclusively from the M3 catalog,
+exactly as AGENTS.md requires.
+
+**Image storage and retention** (`packages/domain/src/media/storage.ts`):
+
+- A `MediaStorage` interface (`createUploadUrl`, `createDownloadUrl`, `readObject`, `deleteObject`)
+  is implemented by `LocalMediaStorage` (development/test: local disk, HMAC-signed, time-limited
+  tokenized URLs served back by the API's own `/dev-storage/*` route — mirroring how a real signed
+  URL behaves, with no external dependency) and `SupabaseMediaStorage` (a REST adapter against
+  Supabase Storage's sign/object endpoints for staging/production). `createMediaStorage` fails
+  closed exactly like D-010's `createAiProvider`: the `local` driver is refused outside
+  development/test, and the `supabase` driver requires a real service-role key. `SupabaseMediaStorage`
+  has not been exercised against a live Supabase project in this environment — this is a limitation,
+  not a design claim, and should be verified before staging use.
+- Ownership: every `media_assets` row's `object_path` is constrained by
+  `media_assets_owner_path` (`<user_id>/<media_id>/...`, M1 migration) and RLS, so a signed URL
+  scoped to one user's object can never be reused for another's even if guessed; `apps/api`'s media
+  routes additionally re-check `user_id` on every read/write through `withUserTransaction`.
+  `supabase/tests/security.test.ts` adds a negative ownership test for `media_assets`, `meal_scans`
+  and `meal_logs` (select/update/delete/insert-as-another-user all denied), per AGENTS.md's
+  requirement for every newly user-owned table.
+- **Retention/deletion policy:** `RETENTION_DAYS = 30` (`apps/api/src/modules/media/service.ts`), a
+  provisional default pending a privacy/legal release-gate review (the blueprint does not set a
+  number). `deleteMedia` is user-invokable at any time (soft-deletes the row, best-effort removes the
+  stored object) rather than only passively expiring — meal photos are consent-sensitive and
+  AGENTS.md requires "no secrets ... in logs"-level care for user media generally. A scheduled
+  purge job for the 30-day expiry itself is not implemented in M4 (noted as a release-gate item,
+  alongside D-018/D-025's other open items) — only on-demand deletion and the schema-level
+  retention intent exist today.
+
+**Recognition adapter and the mock extension** (`packages/ai/src/providers/mock.ts`,
+`apps/worker/src/handlers/meal-scan-analyze.ts`): no real AI vision provider or key is available in
+this environment (as flagged in the M4 ticket), so `MockAiProvider.recognizeMeal` is what the test
+suite actually exercises. It is extended from D-010's existing mock-first pattern, not a new
+mechanism: output is deterministic, keyed by a sha256 hash of the image bytes (or an explicit
+`context.mock_scenario` for tests), with five canned scenarios (`default`, `all_matched`,
+`unmatched_item`, `low_confidence`, `non_food`, and a `provider_error` throw path for retry/failure
+tests) — the matched-food scenarios reference real M3 test-fixture catalog names so the
+catalog-matching path is exercised honestly. Like every other mock in this codebase, it never
+returns a nutrition value (asserted directly in `packages/ai/src/providers/factory.test.ts`) and
+`createAiProvider` still fails closed in staging/production without a real provider and key.
+
+**Schema-validated recognition, resolved against the catalog, never invented**
+(`packages/domain/src/meals/recognition-schema.ts`, `review.ts`):
+
+- The provider's raw JSON is validated against a strict, versioned zod schema
+  (`providerRecognitionSchema`, `schema_version: '1'`, bounded array sizes) before anything touches
+  the database; anything malformed or adversarial becomes a safe `invalid_provider_response` job
+  failure, never a crash and never partially-trusted data.
+- `catalog_candidates` for each recognized item are attached server-side from the real M3 catalog
+  (`catalog/matching.ts`'s simple exact/prefix/substring matcher — intentionally not NLP, same
+  provisional-matching caveat as D-025's dislike filter) — the provider is never trusted to supply
+  catalog ids itself.
+- At confirmation (`resolveConfirmedItems`), an item is resolved by its explicit `food_id` or an
+  exact label match; anything else is **honestly surfaced as unmatched**: `nutrients: null`,
+  `uncertainty: 'high'`, and it is excluded from the meal's nutrient totals (which therefore become
+  `coverage.complete = false` rather than silently omitting the item's contribution) — consistent
+  with D-025's "unknown nutrient stays null, never zero" rule applied to whole items, not just
+  individual nutrients.
+
+**Job/state model:** reuses, rather than duplicates, the two states the M1 schema already
+defines — `generation_requests` (the D-017 transactional-outbox/idempotency envelope: queued →
+running → completed/failed, safe retries via `FOR UPDATE SKIP LOCKED`, `GENERATION_REQUEST_QUEUES`
+now also maps `meal_scan` to the new `meal-scan.analyze` queue) and `meal_scans`'s own status column
+(blueprint §8's richer state machine: `awaiting_upload → queued → recognizing → needs_confirmation →
+ready/failed/cancelled/expired`). The worker handler (`meal-scan-analyze.ts`) mirrors
+`diet-plan-generate.ts`'s idempotency precedent exactly: it short-circuits on an already-terminal
+`generation_requests` row, and separately short-circuits (without overwriting an existing
+recognition) if the `meal_scans` row was already resolved but the request row had not yet been
+marked terminal — the crash-recovery case, covered by its own test.
+
+**Mandatory review before saving:** `confirmMealScanItems` is a confirm step, not an auto-apply —
+nothing is written to `meal_logs` from recognition alone. It requires `expected_revision`
+(409 `REVISION_CONFLICT` on a stale confirm, D-022's convention) and an `Idempotency-Key` on both
+the confirm and the subsequent `createMealLog` call, so a user can safely retry a submission whose
+response was lost.
+
+**Meal Balance v1** (`packages/domain/src/meals/balance.ts`): an explainable, provisional, explicitly
+non-medical heuristic (`policy_version: 'meal-balance-v1-provisional'`) scoring protein, fibre,
+vegetable/fruit presence and variety (0–25 each); it returns a null score with a message whenever
+nutrition coverage is incomplete, rather than a misleadingly precise number over partial data.
+
+**Provisional daily scan quota:** `MEAL_SCAN_DAILY_QUOTA = 20` (`apps/api/src/modules/meals/scan-service.ts`),
+tracked via the existing `usage_reservations` table. Like the portion-scale clamp in D-025, this is
+an engineering placeholder pending the real entitlements/quota policy (M10 billing scope), not a
+reviewed product limit.
+
+**Flutter:** `apps/mobile/lib/core/meals/` follows the M3 `DietRepository`/`DietController`
+structural precedent exactly — an abstract `MealScanRepository`, an `ApiMealScanRepository` (uses a
+second, unauthenticated `Dio` instance for the raw upload PUT, since a pre-signed upload URL must
+never carry this app's bearer token), and a development-only `MockMealScanRepository` that
+simulates the whole upload → recognize → review pipeline in memory with obviously-labelled "(mock)"
+items. Because this flow has more steps than a single resource, `MealScanController` models an
+explicit state machine (`MealScanFlowState`: idle → uploading → processing → reviewing → saving →
+saved/failed) rather than a plain `AsyncNotifier<T>`; `image_picker` (exact-pinned, like every other
+dependency in `pubspec.yaml`) is the camera/gallery capture package, added as an implementation of
+the blueprint's already-scoped scanning capability, not a stack change.

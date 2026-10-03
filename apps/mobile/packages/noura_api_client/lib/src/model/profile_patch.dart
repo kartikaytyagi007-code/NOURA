@@ -4,7 +4,8 @@
 
 // ignore_for_file: unused_element
 import 'package:noura_api_client/src/model/activity_band.dart';
-import 'package:noura_api_client/src/model/calculation_sex.dart';
+import 'package:noura_api_client/src/model/screening_answers.dart';
+import 'package:noura_api_client/src/model/calculation_sex_input.dart';
 import 'package:noura_api_client/src/model/onboarding_step.dart';
 import 'package:noura_api_client/src/model/goal_input.dart';
 import 'package:noura_api_client/src/model/unit_system.dart';
@@ -44,6 +45,8 @@ class ProfilePatch {
 
     this.primaryGoal,
 
+    this.screening,
+
     this.onboardingStep,
   });
 
@@ -60,7 +63,7 @@ class ProfilePatch {
   final int? ageYears;
 
   @JsonKey(name: r'calculation_sex', required: false, includeIfNull: false)
-  final CalculationSex? calculationSex;
+  final CalculationSexInput? calculationSex;
 
   // minimum: 50
   // maximum: 272
@@ -84,6 +87,9 @@ class ProfilePatch {
   @JsonKey(name: r'primary_goal', required: false, includeIfNull: false)
   final GoalInput? primaryGoal;
 
+  @JsonKey(name: r'screening', required: false, includeIfNull: false)
+  final ScreeningAnswers? screening;
+
   @JsonKey(name: r'onboarding_step', required: false, includeIfNull: false)
   final OnboardingStep? onboardingStep;
 
@@ -103,6 +109,7 @@ class ProfilePatch {
                 timezone,
                 unitSystem,
                 primaryGoal,
+                screening,
                 onboardingStep,
               ],
               [
@@ -116,6 +123,7 @@ class ProfilePatch {
                 other.timezone,
                 other.unitSystem,
                 other.primaryGoal,
+                other.screening,
                 other.onboardingStep,
               ],
             );
@@ -135,6 +143,7 @@ class ProfilePatch {
         timezone,
         unitSystem,
         primaryGoal,
+        screening,
         onboardingStep,
       ]);
 

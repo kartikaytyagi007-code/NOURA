@@ -12,6 +12,9 @@ class NTextField extends StatelessWidget {
     this.autofillHints,
     this.textInputAction,
     this.onSubmitted,
+    this.helperText,
+    this.suffixText,
+    this.enabled = true,
   });
 
   final String label;
@@ -22,6 +25,9 @@ class NTextField extends StatelessWidget {
   final Iterable<String>? autofillHints;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onSubmitted;
+  final String? helperText;
+  final String? suffixText;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +41,8 @@ class NTextField extends StatelessWidget {
       onFieldSubmitted: onSubmitted,
       autocorrect: false,
       enableSuggestions: !obscureText,
-      decoration: InputDecoration(labelText: label),
+      enabled: enabled,
+      decoration: InputDecoration(labelText: label, helperText: helperText, suffixText: suffixText),
     );
   }
 }

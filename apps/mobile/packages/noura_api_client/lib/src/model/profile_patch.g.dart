@@ -13,7 +13,7 @@ abstract class _$ProfilePatchCWProxy {
 
   ProfilePatch ageYears(int? ageYears);
 
-  ProfilePatch calculationSex(CalculationSex? calculationSex);
+  ProfilePatch calculationSex(CalculationSexInput? calculationSex);
 
   ProfilePatch heightCm(num? heightCm);
 
@@ -27,6 +27,8 @@ abstract class _$ProfilePatchCWProxy {
 
   ProfilePatch primaryGoal(GoalInput? primaryGoal);
 
+  ProfilePatch screening(ScreeningAnswers? screening);
+
   ProfilePatch onboardingStep(OnboardingStep? onboardingStep);
 
   /// This function **does support** nullification of nullable fields. All `null` values passed to `non-nullable` fields will be ignored. You can also use `ProfilePatch(...).copyWith.fieldName(...)` to override fields one at a time with nullification support.
@@ -39,13 +41,14 @@ abstract class _$ProfilePatchCWProxy {
     int expectedRevision,
     String? displayName,
     int? ageYears,
-    CalculationSex? calculationSex,
+    CalculationSexInput? calculationSex,
     num? heightCm,
     num? weightKg,
     ActivityBand? activityBand,
     String? timezone,
     UnitSystem? unitSystem,
     GoalInput? primaryGoal,
+    ScreeningAnswers? screening,
     OnboardingStep? onboardingStep,
   });
 }
@@ -68,7 +71,7 @@ class _$ProfilePatchCWProxyImpl implements _$ProfilePatchCWProxy {
   ProfilePatch ageYears(int? ageYears) => this(ageYears: ageYears);
 
   @override
-  ProfilePatch calculationSex(CalculationSex? calculationSex) =>
+  ProfilePatch calculationSex(CalculationSexInput? calculationSex) =>
       this(calculationSex: calculationSex);
 
   @override
@@ -93,6 +96,10 @@ class _$ProfilePatchCWProxyImpl implements _$ProfilePatchCWProxy {
       this(primaryGoal: primaryGoal);
 
   @override
+  ProfilePatch screening(ScreeningAnswers? screening) =>
+      this(screening: screening);
+
+  @override
   ProfilePatch onboardingStep(OnboardingStep? onboardingStep) =>
       this(onboardingStep: onboardingStep);
 
@@ -114,6 +121,7 @@ class _$ProfilePatchCWProxyImpl implements _$ProfilePatchCWProxy {
     Object? timezone = const $CopyWithPlaceholder(),
     Object? unitSystem = const $CopyWithPlaceholder(),
     Object? primaryGoal = const $CopyWithPlaceholder(),
+    Object? screening = const $CopyWithPlaceholder(),
     Object? onboardingStep = const $CopyWithPlaceholder(),
   }) {
     return ProfilePatch(
@@ -132,7 +140,7 @@ class _$ProfilePatchCWProxyImpl implements _$ProfilePatchCWProxy {
       calculationSex: calculationSex == const $CopyWithPlaceholder()
           ? _value.calculationSex
           // ignore: cast_nullable_to_non_nullable
-          : calculationSex as CalculationSex?,
+          : calculationSex as CalculationSexInput?,
       heightCm: heightCm == const $CopyWithPlaceholder()
           ? _value.heightCm
           // ignore: cast_nullable_to_non_nullable
@@ -157,6 +165,10 @@ class _$ProfilePatchCWProxyImpl implements _$ProfilePatchCWProxy {
           ? _value.primaryGoal
           // ignore: cast_nullable_to_non_nullable
           : primaryGoal as GoalInput?,
+      screening: screening == const $CopyWithPlaceholder()
+          ? _value.screening
+          // ignore: cast_nullable_to_non_nullable
+          : screening as ScreeningAnswers?,
       onboardingStep: onboardingStep == const $CopyWithPlaceholder()
           ? _value.onboardingStep
           // ignore: cast_nullable_to_non_nullable
@@ -190,7 +202,7 @@ ProfilePatch _$ProfilePatchFromJson(Map<String, dynamic> json) =>
           ageYears: $checkedConvert('age_years', (v) => (v as num?)?.toInt()),
           calculationSex: $checkedConvert(
             'calculation_sex',
-            (v) => $enumDecodeNullable(_$CalculationSexEnumMap, v),
+            (v) => $enumDecodeNullable(_$CalculationSexInputEnumMap, v),
           ),
           heightCm: $checkedConvert('height_cm', (v) => v as num?),
           weightKg: $checkedConvert('weight_kg', (v) => v as num?),
@@ -208,6 +220,12 @@ ProfilePatch _$ProfilePatchFromJson(Map<String, dynamic> json) =>
             (v) => v == null
                 ? null
                 : GoalInput.fromJson(v as Map<String, dynamic>),
+          ),
+          screening: $checkedConvert(
+            'screening',
+            (v) => v == null
+                ? null
+                : ScreeningAnswers.fromJson(v as Map<String, dynamic>),
           ),
           onboardingStep: $checkedConvert(
             'onboarding_step',
@@ -235,19 +253,21 @@ Map<String, dynamic> _$ProfilePatchToJson(ProfilePatch instance) =>
       'expected_revision': instance.expectedRevision,
       'display_name': ?instance.displayName,
       'age_years': ?instance.ageYears,
-      'calculation_sex': ?_$CalculationSexEnumMap[instance.calculationSex],
+      'calculation_sex': ?_$CalculationSexInputEnumMap[instance.calculationSex],
       'height_cm': ?instance.heightCm,
       'weight_kg': ?instance.weightKg,
       'activity_band': ?_$ActivityBandEnumMap[instance.activityBand],
       'timezone': ?instance.timezone,
       'unit_system': ?_$UnitSystemEnumMap[instance.unitSystem],
       'primary_goal': ?instance.primaryGoal?.toJson(),
+      'screening': ?instance.screening?.toJson(),
       'onboarding_step': ?_$OnboardingStepEnumMap[instance.onboardingStep],
     };
 
-const _$CalculationSexEnumMap = {
-  CalculationSex.female: 'female',
-  CalculationSex.male: 'male',
+const _$CalculationSexInputEnumMap = {
+  CalculationSexInput.female: 'female',
+  CalculationSexInput.male: 'male',
+  CalculationSexInput.declined: 'declined',
 };
 
 const _$ActivityBandEnumMap = {

@@ -112,9 +112,16 @@ paths:
     patch:
       operationId: patchMe
       tags: [profile]
-      summary: Save a partial profile / onboarding step.
+      summary: Save a partial profile / goal / screening / onboarding step.
+      description: |
+        Merges the supplied fields into the profile and bumps the profile revision by one.
+        `expected_revision` must equal the current revision (409 otherwise). The server validates every
+        field, recomputes eligibility when age or screening change, and, once onboarding is completed,
+        refreshes the target snapshot when a target-relevant field changed. `onboarding_step` may only
+        be set while onboarding is not completed. Replays of the same `Idempotency-Key` return the
+        original response.
       x-noura-milestone: M2
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -135,9 +142,12 @@ paths:
     put:
       operationId: putPreferences
       summary: Replace diet preferences.
+      description: |
+        Whole-object replacement. `expected_revision` is the preferences revision from `GET /v1/me`
+        (`0` when no preferences exist yet). The first save creates revision 1.
       tags: [profile]
       x-noura-milestone: M2
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -158,9 +168,12 @@ paths:
     put:
       operationId: putTrainingPreferences
       summary: Replace training preferences.
+      description: |
+        Whole-object replacement. `expected_revision` is the training-preferences revision from
+        `GET /v1/me` (`0` when none exist yet). The first save creates revision 1.
       tags: [profile]
       x-noura-milestone: M2
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -181,9 +194,16 @@ paths:
     post:
       operationId: completeOnboarding
       tags: [profile]
-      summary: Transactionally completes onboarding, creates target snapshot and plan jobs.
+      summary: Transactionally completes onboarding, creates the target snapshot and the plan request.
+      description: |
+        In one transaction: verifies the profile revision and that every onboarding input is present,
+        records consents, determines eligibility, completes onboarding, and (only for eligible users
+        when an allowed target policy exists) writes a target snapshot and one durable generation
+        request. The request is relayed to the job queue by the worker, so a queue or generation
+        failure never loses profile data. Replays of the same `Idempotency-Key` return the original
+        response; a second completion is rejected.
       x-noura-milestone: M2
-      x-noura-status: planned
+      x-noura-status: implemented
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -206,7 +226,7 @@ paths:
       summary: Current nutrition target snapshot.
       tags: [profile]
       x-noura-milestone: M2
-      x-noura-status: planned
+      x-noura-status: implemented
       responses:
         '200':
           description: Current target snapshot and calculation method.
@@ -1436,6 +1456,13 @@ components:
       type: string
       enum: [female, male]
       description: Optional parameter for energy equations only. Not gender identity.
+    CalculationSexInput:
+      type: string
+      enum: [female, male, declined]
+      description: |
+        Input form of CalculationSex. `declined` stores "no value" (the profile then reads null) and
+        yields an energy range instead of a single target. It exists so a client can clear a
+        previously given value explicitly; JSON null is not used in requests.
     ActivityBand:
       type: string
       enum: [sedentary, light, moderate, active, very_active]
@@ -1472,7 +1499,7 @@ components:
     Profile:
       type: object
       additionalProperties: false
-      required: [display_name, age_years, calculation_sex, height_cm, activity_band, timezone, unit_system, revision]
+      required: [display_name, age_years, calculation_sex, height_cm, weight_kg, activity_band, timezone, unit_system, revision]
       properties:
         display_name: { type: string, nullable: true, minLength: 1, maxLength: 80 }
         age_years: { type: integer, nullable: true, minimum: 1, maximum: 120 }
@@ -1481,6 +1508,7 @@ components:
           allOf: [{ $ref: '#/components/schemas/CalculationSex' }]
           nullable: true
         height_cm: { type: number, nullable: true, minimum: 50, maximum: 272 }
+        weight_kg: { type: number, nullable: true, minimum: 20, maximum: 400 }
         activity_band:
           type: string
           allOf: [{ $ref: '#/components/schemas/ActivityBand' }]
@@ -1507,10 +1535,22 @@ components:
           type: string
           allOf: [{ $ref: '#/components/schemas/DietType' }]
           nullable: true
-        allergy_ids: { type: array, maxItems: 30, items: { type: string, maxLength: 64 } }
-        exclusion_ids: { type: array, maxItems: 50, items: { type: string, maxLength: 64 } }
+        allergy_ids:
+          type: array
+          maxItems: 30
+          description: Allergy tags (AllergyTag). Clients ignore values they do not know.
+          items: { type: string, maxLength: 64 }
+        exclusion_ids:
+          type: array
+          maxItems: 50
+          description: Food exclusion tags (ExclusionTag). Clients ignore values they do not know.
+          items: { type: string, maxLength: 64 }
         dislikes: { type: array, maxItems: 50, items: { type: string, maxLength: 80 } }
-        cuisines: { type: array, maxItems: 20, items: { type: string, maxLength: 64 } }
+        cuisines:
+          type: array
+          maxItems: 20
+          description: Cuisine tags (CuisineTag). Clients ignore values they do not know.
+          items: { type: string, maxLength: 64 }
         budget_band:
           type: string
           allOf: [{ $ref: '#/components/schemas/BudgetBand' }]
@@ -1534,7 +1574,11 @@ components:
           type: string
           allOf: [{ $ref: '#/components/schemas/TrainingLocation' }]
           nullable: true
-        equipment_ids: { type: array, maxItems: 50, items: { type: string, maxLength: 64 } }
+        equipment_ids:
+          type: array
+          maxItems: 50
+          description: Equipment tags (EquipmentTag). Clients ignore values they do not know.
+          items: { type: string, maxLength: 64 }
         weekdays:
           type: array
           maxItems: 7
@@ -1542,15 +1586,23 @@ components:
           items: { type: integer, minimum: 1, maximum: 7 }
         days_per_week: { type: integer, nullable: true, minimum: 1, maximum: 7 }
         duration_minutes: { type: integer, nullable: true, minimum: 10, maximum: 180 }
-        limitation_tags: { type: array, maxItems: 30, items: { type: string, maxLength: 64 } }
+        limitation_tags:
+          type: array
+          maxItems: 30
+          description: Limitation tags (LimitationTag). Clients ignore values they do not know.
+          items: { type: string, maxLength: 64 }
         revision: { type: integer, minimum: 1 }
     Me:
       type: object
       additionalProperties: false
-      required: [user_id, profile, preferences, training_preferences, eligibility_status, onboarding]
+      required: [user_id, profile, goal, preferences, training_preferences, eligibility_status, screening, onboarding, planning]
       properties:
         user_id: { type: string, format: uuid }
         profile: { $ref: '#/components/schemas/Profile' }
+        goal:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/Goal' }]
+          nullable: true
         preferences:
           type: object
           allOf: [{ $ref: '#/components/schemas/Preferences' }]
@@ -1563,7 +1615,17 @@ components:
           type: string
           allOf: [{ $ref: '#/components/schemas/EligibilityStatus' }]
           nullable: true
+        screening:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/ScreeningAnswers' }]
+          nullable: true
+          description: The stored screening answers, or null until the user has answered.
         onboarding: { $ref: '#/components/schemas/Onboarding' }
+        planning:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/Planning' }]
+          nullable: true
+          description: Null until onboarding is completed.
       example:
         user_id: 0d1f8a52-6f2b-4b8e-9a51-6f0f3b0f9a77
         profile:
@@ -1571,14 +1633,18 @@ components:
           age_years: null
           calculation_sex: null
           height_cm: null
+          weight_kg: null
           activity_band: null
           timezone: UTC
           unit_system: metric
           revision: 1
+        goal: null
         preferences: null
         training_preferences: null
         eligibility_status: null
+        screening: null
         onboarding: { status: not_started, step: null }
+        planning: null
     MeResponse:
       type: object
       additionalProperties: false
@@ -1586,6 +1652,65 @@ components:
       properties:
         data: { $ref: '#/components/schemas/Me' }
         meta: { $ref: '#/components/schemas/Meta' }
+    Goal:
+      type: object
+      additionalProperties: false
+      required: [goal_type, target_weight_kg]
+      properties:
+        goal_type: { $ref: '#/components/schemas/GoalType' }
+        target_weight_kg: { type: number, nullable: true, minimum: 20, maximum: 400 }
+    ScreeningAnswer:
+      type: string
+      enum: ['yes', 'no', prefer_not_to_say]
+    ScreeningAnswers:
+      type: object
+      additionalProperties: false
+      description: |
+        Minimal eligibility screening (blueprint §1). Only these three answers are stored. A "yes" or a
+        declined answer means automated plans are not generated; tracking features stay available.
+      required: [pregnancy_or_breastfeeding, eating_disorder_concern, medical_diet_condition]
+      properties:
+        pregnancy_or_breastfeeding: { $ref: '#/components/schemas/ScreeningAnswer' }
+        eating_disorder_concern: { $ref: '#/components/schemas/ScreeningAnswer' }
+        medical_diet_condition: { $ref: '#/components/schemas/ScreeningAnswer' }
+    PlanningStatus:
+      type: string
+      enum: [requested, unavailable_tracking_only, unavailable_needs_review, unavailable_policy]
+      description: |
+        requested: a generation request exists (poll `GET /v1/jobs/{id}`).
+        unavailable_tracking_only / unavailable_needs_review: eligibility excludes automated plans.
+        unavailable_policy: eligible, but no approved target policy is configured for this environment.
+    Planning:
+      type: object
+      additionalProperties: false
+      required: [status, job_id]
+      properties:
+        status: { $ref: '#/components/schemas/PlanningStatus' }
+        job_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: The initial diet-plan generation request, when status is requested.
+    AllergyTag:
+      type: string
+      description: Provisional vocabulary (docs/decisions.md D-020). Not a medical allergy list.
+      enum: [gluten, crustacean, milk, egg, fish, peanut, tree_nut, soy, sesame]
+    ExclusionTag:
+      type: string
+      description: Provisional vocabulary (D-020). Foods the user does not eat for non-allergy reasons.
+      enum: [beef, pork, mutton, chicken, seafood, onion_garlic, root_vegetables, mushroom, alcohol]
+    CuisineTag:
+      type: string
+      description: Provisional vocabulary (D-020).
+      enum: [north_indian, south_indian, east_indian, west_indian, indo_chinese, continental]
+    EquipmentTag:
+      type: string
+      description: Provisional vocabulary (D-020); refined with the exercise catalog in M7.
+      enum: [bodyweight, dumbbells, barbell, kettlebell, resistance_bands, bench, pull_up_bar, machines]
+    LimitationTag:
+      type: string
+      description: Provisional vocabulary (D-020). Areas where exercises should be gentler; not a medical assessment.
+      enum: [knee, lower_back, shoulder, neck, wrist_elbow, hip, ankle_foot]
     GoalInput:
       type: object
       additionalProperties: false
@@ -1602,28 +1727,26 @@ components:
         expected_revision: { type: integer, minimum: 1 }
         display_name: { type: string, minLength: 1, maxLength: 80 }
         age_years: { type: integer, minimum: 1, maximum: 120 }
-        calculation_sex:
-          type: string
-          allOf: [{ $ref: '#/components/schemas/CalculationSex' }]
-          nullable: true
+        calculation_sex: { $ref: '#/components/schemas/CalculationSexInput' }
         height_cm: { type: number, minimum: 50, maximum: 272 }
         weight_kg: { type: number, minimum: 20, maximum: 400 }
         activity_band: { $ref: '#/components/schemas/ActivityBand' }
         timezone: { type: string, minLength: 1, maxLength: 64 }
         unit_system: { $ref: '#/components/schemas/UnitSystem' }
         primary_goal: { $ref: '#/components/schemas/GoalInput' }
+        screening: { $ref: '#/components/schemas/ScreeningAnswers' }
         onboarding_step: { $ref: '#/components/schemas/OnboardingStep' }
     PreferencesInput:
       type: object
       additionalProperties: false
       required: [expected_revision, diet_type, allergy_ids, exclusion_ids, cuisines, budget_band, cooking_time, meals_per_day]
       properties:
-        expected_revision: { type: integer, minimum: 1 }
+        expected_revision: { type: integer, minimum: 0, description: 'Current preferences revision; 0 when none exist yet.' }
         diet_type: { $ref: '#/components/schemas/DietType' }
-        allergy_ids: { type: array, maxItems: 30, uniqueItems: true, items: { type: string, maxLength: 64 } }
-        exclusion_ids: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, maxLength: 64 } }
-        dislikes: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, maxLength: 80 } }
-        cuisines: { type: array, maxItems: 20, uniqueItems: true, items: { type: string, maxLength: 64 } }
+        allergy_ids: { type: array, maxItems: 30, uniqueItems: true, items: { $ref: '#/components/schemas/AllergyTag' } }
+        exclusion_ids: { type: array, maxItems: 50, uniqueItems: true, items: { $ref: '#/components/schemas/ExclusionTag' } }
+        dislikes: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, minLength: 1, maxLength: 80 } }
+        cuisines: { type: array, maxItems: 20, uniqueItems: true, items: { $ref: '#/components/schemas/CuisineTag' } }
         budget_band: { $ref: '#/components/schemas/BudgetBand' }
         cooking_time: { $ref: '#/components/schemas/CookingTime' }
         meals_per_day: { type: integer, minimum: 1, maximum: 8 }
@@ -1639,10 +1762,10 @@ components:
       additionalProperties: false
       required: [expected_revision, experience, location, equipment_ids, weekdays, days_per_week, duration_minutes, limitation_tags]
       properties:
-        expected_revision: { type: integer, minimum: 1 }
+        expected_revision: { type: integer, minimum: 0, description: 'Current training-preferences revision; 0 when none exist yet.' }
         experience: { $ref: '#/components/schemas/ExperienceLevel' }
         location: { $ref: '#/components/schemas/TrainingLocation' }
-        equipment_ids: { type: array, maxItems: 50, uniqueItems: true, items: { type: string, maxLength: 64 } }
+        equipment_ids: { type: array, maxItems: 50, uniqueItems: true, items: { $ref: '#/components/schemas/EquipmentTag' } }
         weekdays:
           type: array
           minItems: 1
@@ -1651,7 +1774,7 @@ components:
           items: { type: integer, minimum: 1, maximum: 7 }
         days_per_week: { type: integer, minimum: 1, maximum: 7 }
         duration_minutes: { type: integer, minimum: 10, maximum: 180 }
-        limitation_tags: { type: array, maxItems: 30, uniqueItems: true, items: { type: string, maxLength: 64 } }
+        limitation_tags: { type: array, maxItems: 30, uniqueItems: true, items: { $ref: '#/components/schemas/LimitationTag' } }
     TrainingPreferencesResponse:
       type: object
       additionalProperties: false
@@ -1665,6 +1788,10 @@ components:
     ConsentInput:
       type: object
       additionalProperties: false
+      description: |
+        `terms`, `privacy` and `health_data_processing` are required to complete onboarding. The
+        optional `ai_meal_processing` and `progress_photo_storage` consents are requested where they
+        are used (M4, M8), never here. Versions must be ones the server currently publishes.
       required: [consent_type, version]
       properties:
         consent_type: { $ref: '#/components/schemas/ConsentType' }
@@ -1721,19 +1848,36 @@ components:
     TargetSnapshot:
       type: object
       additionalProperties: false
-      required: [id, profile_revision, policy_version, method, method_reference, eligibility, estimated_energy_kcal, targets, valid_from]
+      required: [id, profile_revision, policy_version, policy_status, method, method_reference, eligibility, basis, estimated_energy_kcal, targets, warnings, valid_from]
       properties:
         id: { type: string, format: uuid }
         profile_revision: { type: integer, minimum: 1 }
         policy_version: { type: string }
+        policy_status:
+          type: string
+          enum: [test, approved]
+          description: |
+            `test` means a development placeholder policy: the numbers are not reviewed and must never
+            be presented as medical advice. Only `approved` policies may drive production planning.
         method: { type: string, enum: [policy, user_override] }
         method_reference: { type: string, nullable: true }
         eligibility: { $ref: '#/components/schemas/EligibilityStatus' }
+        basis:
+          type: string
+          enum: [point, range, not_calculated]
+          description: |
+            point: one energy target. range: the calculation sex was declined, so only an energy range
+            is offered and energy-dependent targets are null. not_calculated: eligibility excludes
+            automated planning, so no targets exist.
         estimated_energy_kcal:
           type: object
           allOf: [{ $ref: '#/components/schemas/IntRange' }]
           nullable: true
         targets: { $ref: '#/components/schemas/MacroTargets' }
+        warnings:
+          type: array
+          maxItems: 10
+          items: { type: string, enum: [energy_floor_applied, macro_budget_conflict] }
         valid_from: { type: string, format: date-time }
     TargetSnapshotResponse:
       type: object

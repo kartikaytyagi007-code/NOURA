@@ -5,13 +5,16 @@ import '../../app/shell.dart';
 import '../../core/providers.dart';
 import '../../core/ui/components/feature_placeholder.dart';
 import '../../core/ui/tokens.dart';
+import 'plan_status_card.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final name = ref.watch(sessionProfileProvider).value?.displayName;
+    final me = ref.watch(meControllerProvider).value;
+    final name = me?.profile.displayName;
+    final planning = me?.planning;
     return TabPage(
       title: "Today's progress",
       children: [
@@ -20,6 +23,7 @@ class HomeScreen extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: NSpace.md),
             child: Text('Hi, $name', style: Theme.of(context).textTheme.headlineSmall),
           ),
+        if (planning != null) PlanStatusCard(planning: planning),
         const FeaturePlaceholder(
           title: 'Scan a meal',
           milestone: 'M4',

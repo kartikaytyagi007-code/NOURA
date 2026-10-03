@@ -25,8 +25,8 @@ class ProfileApi {
 
   const ProfileApi(this._dio);
 
-  /// Transactionally completes onboarding, creates target snapshot and plan jobs.
-  ///
+  /// Transactionally completes onboarding, creates the target snapshot and the plan request.
+  /// In one transaction: verifies the profile revision and that every onboarding input is present, records consents, determines eligibility, completes onboarding, and (only for eligible users when an allowed target policy exists) writes a target snapshot and one durable generation request. The request is relayed to the job queue by the worker, so a queue or generation failure never loses profile data. Replays of the same &#x60;Idempotency-Key&#x60; return the original response; a second completion is rejected.
   ///
   /// Parameters:
   /// * [idempotencyKey] - Client-generated key (UUID recommended). Replays return the original result.
@@ -272,8 +272,8 @@ class ProfileApi {
     );
   }
 
-  /// Save a partial profile / onboarding step.
-  ///
+  /// Save a partial profile / goal / screening / onboarding step.
+  /// Merges the supplied fields into the profile and bumps the profile revision by one. &#x60;expected_revision&#x60; must equal the current revision (409 otherwise). The server validates every field, recomputes eligibility when age or screening change, and, once onboarding is completed, refreshes the target snapshot when a target-relevant field changed. &#x60;onboarding_step&#x60; may only be set while onboarding is not completed. Replays of the same &#x60;Idempotency-Key&#x60; return the original response.
   ///
   /// Parameters:
   /// * [idempotencyKey] - Client-generated key (UUID recommended). Replays return the original result.
@@ -370,7 +370,7 @@ class ProfileApi {
   }
 
   /// Replace diet preferences.
-  ///
+  /// Whole-object replacement. &#x60;expected_revision&#x60; is the preferences revision from &#x60;GET /v1/me&#x60; (&#x60;0&#x60; when no preferences exist yet). The first save creates revision 1.
   ///
   /// Parameters:
   /// * [idempotencyKey] - Client-generated key (UUID recommended). Replays return the original result.
@@ -467,7 +467,7 @@ class ProfileApi {
   }
 
   /// Replace training preferences.
-  ///
+  /// Whole-object replacement. &#x60;expected_revision&#x60; is the training-preferences revision from &#x60;GET /v1/me&#x60; (&#x60;0&#x60; when none exist yet). The first save creates revision 1.
   ///
   /// Parameters:
   /// * [idempotencyKey] - Client-generated key (UUID recommended). Replays return the original result.

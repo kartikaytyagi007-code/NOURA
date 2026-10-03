@@ -30,6 +30,8 @@ class Profile {
 
     required this.heightCm,
 
+    required this.weightKg,
+
     required this.activityBand,
 
     required this.timezone,
@@ -55,6 +57,11 @@ class Profile {
   @JsonKey(name: r'height_cm', required: true, includeIfNull: true)
   final num? heightCm;
 
+  // minimum: 20
+  // maximum: 400
+  @JsonKey(name: r'weight_kg', required: true, includeIfNull: true)
+  final num? weightKg;
+
   @JsonKey(name: r'activity_band', required: true, includeIfNull: true)
   final ActivityBand? activityBand;
 
@@ -79,6 +86,7 @@ class Profile {
                 ageYears,
                 calculationSex,
                 heightCm,
+                weightKg,
                 activityBand,
                 timezone,
                 unitSystem,
@@ -89,6 +97,7 @@ class Profile {
                 other.ageYears,
                 other.calculationSex,
                 other.heightCm,
+                other.weightKg,
                 other.activityBand,
                 other.timezone,
                 other.unitSystem,
@@ -105,6 +114,7 @@ class Profile {
         ageYears,
         calculationSex,
         heightCm,
+        weightKg,
         activityBand,
         timezone,
         unitSystem,

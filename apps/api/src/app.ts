@@ -4,6 +4,7 @@ import type { ApiConfig } from './config.js';
 import { registerHealthRoutes } from './modules/health/routes.js';
 import { registerJobRoutes } from './modules/jobs/routes.js';
 import { registerMeRoutes } from './modules/me/routes.js';
+import { registerProfileRoutes } from './modules/profile/routes.js';
 import type { TokenVerifier } from './plugins/auth.js';
 import type { Database } from './plugins/db.js';
 import { registerErrorHandling } from './plugins/errors.js';
@@ -58,6 +59,7 @@ export function buildApp(
   registerErrorHandling(app);
   registerHealthRoutes(app, deps);
   registerMeRoutes(app, deps);
+  registerProfileRoutes(app, deps);
   registerJobRoutes(app, deps);
   return app;
 }

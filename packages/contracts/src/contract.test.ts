@@ -26,13 +26,21 @@ describe('OpenAPI contract structure', () => {
     }
   });
 
-  it('implements exactly the M1 operations in M1', () => {
-    const implemented = ops
-      .filter((o) => o.status === 'implemented')
-      .map((o) => o.operationId)
-      .sort();
-    expect(implemented).toEqual(['getJob', 'getLiveness', 'getMe', 'getReadiness']);
-    for (const op of ops.filter((o) => o.status === 'implemented')) expect(op.milestone).toBe('M1');
+  it('implements exactly the M1 and M2 operations, each tagged with its milestone', () => {
+    const implemented = Object.fromEntries(
+      ops.filter((o) => o.status === 'implemented').map((o) => [o.operationId, o.milestone]),
+    );
+    expect(implemented).toEqual({
+      getLiveness: 'M1',
+      getReadiness: 'M1',
+      getMe: 'M1',
+      getJob: 'M1',
+      patchMe: 'M2',
+      putPreferences: 'M2',
+      putTrainingPreferences: 'M2',
+      completeOnboarding: 'M2',
+      getTargets: 'M2',
+    });
   });
 
   it('covers exactly the blueprint §11 route inventory', () => {

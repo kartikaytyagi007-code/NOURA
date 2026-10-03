@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { TEST_TARGET_POLICY, parseTargetPolicy, type TargetPolicy } from '@noura/domain';
 import { z } from 'zod';
 
 /**
@@ -31,6 +33,8 @@ const schema = z
     SUPABASE_JWT_ISSUER: z.url().optional(),
     SUPABASE_JWT_AUDIENCE: z.string().min(1).default('authenticated'),
     SUPABASE_JWKS_URL: z.url().optional(),
+
+    PLANNING_POLICY_FILE: z.string().min(1).optional(),
 
     AI_PROVIDER: z.enum(['mock', 'gemini']).optional(),
     AI_API_KEY: z.string().min(1).optional(),
@@ -82,6 +86,11 @@ export interface ApiConfig {
   auth: { issuer: string; audience: string; jwksUrl: string };
   ai: { provider: 'mock' | 'gemini'; apiKey?: string | undefined; modelId?: string | undefined };
   billing: { provider: 'mock' | 'revenuecat' };
+  /**
+   * The target policy that drives automated planning, or null when none is configured. Development
+   * and test default to the clearly labelled TEST policy; staging and production never do (D-018).
+   */
+  planningPolicy: TargetPolicy | null;
 }
 
 export class ConfigError extends Error {
@@ -89,6 +98,29 @@ export class ConfigError extends Error {
     super(`Invalid configuration:\n  - ${issues.join('\n  - ')}`);
     this.name = 'ConfigError';
   }
+}
+
+function loadPlanningPolicy(file: string | undefined, deployed: boolean): TargetPolicy | null {
+  if (!file) return deployed ? null : TEST_TARGET_POLICY;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    throw new ConfigError(['PLANNING_POLICY_FILE: the file could not be read as JSON']);
+  }
+  let policy: TargetPolicy;
+  try {
+    policy = parseTargetPolicy(raw);
+  } catch (error) {
+    // parseTargetPolicy reports field paths only, never values.
+    throw new ConfigError([`PLANNING_POLICY_FILE: ${(error as Error).message}`]);
+  }
+  if (deployed && policy.status !== 'approved') {
+    throw new ConfigError([
+      'PLANNING_POLICY_FILE: a test policy is not allowed in this environment',
+    ]);
+  }
+  return policy;
 }
 
 /** Parses environment variables. Error messages name variables but never echo their values. */
@@ -120,5 +152,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     // Development defaults to explicit mocks; deployed environments were validated above.
     ai: { provider: e.AI_PROVIDER ?? 'mock', apiKey: e.AI_API_KEY, modelId: e.AI_MODEL_ID },
     billing: { provider: e.BILLING_PROVIDER ?? 'mock' },
+    planningPolicy: loadPlanningPolicy(
+      e.PLANNING_POLICY_FILE,
+      e.APP_ENV === 'staging' || e.APP_ENV === 'production',
+    ),
   };
 }

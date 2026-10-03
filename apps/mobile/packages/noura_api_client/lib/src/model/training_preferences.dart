@@ -44,6 +44,7 @@ class TrainingPreferences {
   @JsonKey(name: r'location', required: true, includeIfNull: true)
   final TrainingLocation? location;
 
+  /// Equipment tags (EquipmentTag). Clients ignore values they do not know.
   @JsonKey(name: r'equipment_ids', required: true, includeIfNull: false)
   final List<String> equipmentIds;
 
@@ -60,6 +61,7 @@ class TrainingPreferences {
   @JsonKey(name: r'duration_minutes', required: true, includeIfNull: true)
   final int? durationMinutes;
 
+  /// Limitation tags (LimitationTag). Clients ignore values they do not know.
   @JsonKey(name: r'limitation_tags', required: true, includeIfNull: false)
   final List<String> limitationTags;
 

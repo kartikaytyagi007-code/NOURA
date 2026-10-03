@@ -5,8 +5,12 @@ import 'package:noura/app/app.dart';
 import 'package:noura/core/auth/auth_state.dart';
 import 'package:noura/core/auth/mock_auth_repository.dart';
 import 'package:noura/core/config/app_config.dart';
+import 'package:noura/core/profile/profile_repository.dart';
 import 'package:noura/core/profile/session_profile.dart';
 import 'package:noura/core/providers.dart';
+import 'package:noura_api_client/noura_api_client.dart';
+
+import 'fake_profile_server.dart';
 
 AppConfig testConfig({
   AppEnvironment? environment = AppEnvironment.development,
@@ -31,25 +35,35 @@ AppConfig testConfig({
   devBypassOnboarding: devBypassOnboarding,
 );
 
-/// Profile source whose result each test controls; counts calls to prove retry behaviour.
-class FakeProfileRepository implements ProfileRepository {
-  FakeProfileRepository({this.onboarding = OnboardingState.completed, this.error});
+/// Profile source for the shell and auth tests: a fake server that starts in a given onboarding
+/// state, with an optional load error and a count of load attempts to prove retry behaviour.
+class FakeProfileRepository extends FakeProfileServer {
+  FakeProfileRepository({OnboardingState onboarding = OnboardingState.completed, this.error})
+    : super(
+        initial: onboarding == OnboardingState.completed
+            ? FakeProfileServer.completedMe()
+            : FakeProfileServer.emptyMe().copyWith(
+                profile: FakeProfileServer.emptyMe().profile.copyWith(displayName: 'Asha'),
+                onboarding: Onboarding(
+                  status: onboarding == OnboardingState.inProgress
+                      ? OnboardingStatus.inProgress
+                      : OnboardingStatus.notStarted,
+                  step: null,
+                ),
+              ),
+      );
 
-  OnboardingState onboarding;
   Object? error;
-  int calls = 0;
+  int get loads => calls.where((c) => c == 'fetchMe').length;
 
   @override
-  Future<SessionProfile> fetchSessionProfile() async {
-    calls++;
+  Future<Me> fetchMe() async {
     final failure = error;
-    if (failure != null) throw failure;
-    return SessionProfile(
-      userId: MockAuthRepository.mockUserId,
-      displayName: 'Asha',
-      onboarding: onboarding,
-      onboardingStep: null,
-    );
+    if (failure != null) {
+      calls.add('fetchMe');
+      throw failure;
+    }
+    return super.fetchMe();
   }
 }
 
@@ -90,8 +104,9 @@ Future<void> pumpNoura(
   required RecordingAuthRepository auth,
   required ProfileRepository profiles,
   AppConfig? config,
+  Size size = const Size(1080, 2340),
 }) async {
-  tester.view.physicalSize = const Size(1080, 2340);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(

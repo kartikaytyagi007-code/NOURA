@@ -11,13 +11,13 @@ abstract class _$PreferencesInputCWProxy {
 
   PreferencesInput dietType(DietType dietType);
 
-  PreferencesInput allergyIds(Set<String> allergyIds);
+  PreferencesInput allergyIds(Set<AllergyTag> allergyIds);
 
-  PreferencesInput exclusionIds(Set<String> exclusionIds);
+  PreferencesInput exclusionIds(Set<ExclusionTag> exclusionIds);
 
   PreferencesInput dislikes(Set<String>? dislikes);
 
-  PreferencesInput cuisines(Set<String> cuisines);
+  PreferencesInput cuisines(Set<CuisineTag> cuisines);
 
   PreferencesInput budgetBand(BudgetBand budgetBand);
 
@@ -34,10 +34,10 @@ abstract class _$PreferencesInputCWProxy {
   PreferencesInput call({
     int expectedRevision,
     DietType dietType,
-    Set<String> allergyIds,
-    Set<String> exclusionIds,
+    Set<AllergyTag> allergyIds,
+    Set<ExclusionTag> exclusionIds,
     Set<String>? dislikes,
-    Set<String> cuisines,
+    Set<CuisineTag> cuisines,
     BudgetBand budgetBand,
     CookingTime cookingTime,
     int mealsPerDay,
@@ -58,18 +58,19 @@ class _$PreferencesInputCWProxyImpl implements _$PreferencesInputCWProxy {
   PreferencesInput dietType(DietType dietType) => this(dietType: dietType);
 
   @override
-  PreferencesInput allergyIds(Set<String> allergyIds) =>
+  PreferencesInput allergyIds(Set<AllergyTag> allergyIds) =>
       this(allergyIds: allergyIds);
 
   @override
-  PreferencesInput exclusionIds(Set<String> exclusionIds) =>
+  PreferencesInput exclusionIds(Set<ExclusionTag> exclusionIds) =>
       this(exclusionIds: exclusionIds);
 
   @override
   PreferencesInput dislikes(Set<String>? dislikes) => this(dislikes: dislikes);
 
   @override
-  PreferencesInput cuisines(Set<String> cuisines) => this(cuisines: cuisines);
+  PreferencesInput cuisines(Set<CuisineTag> cuisines) =>
+      this(cuisines: cuisines);
 
   @override
   PreferencesInput budgetBand(BudgetBand budgetBand) =>
@@ -113,11 +114,11 @@ class _$PreferencesInputCWProxyImpl implements _$PreferencesInputCWProxy {
       allergyIds: allergyIds == const $CopyWithPlaceholder()
           ? _value.allergyIds
           // ignore: cast_nullable_to_non_nullable
-          : allergyIds as Set<String>,
+          : allergyIds as Set<AllergyTag>,
       exclusionIds: exclusionIds == const $CopyWithPlaceholder()
           ? _value.exclusionIds
           // ignore: cast_nullable_to_non_nullable
-          : exclusionIds as Set<String>,
+          : exclusionIds as Set<ExclusionTag>,
       dislikes: dislikes == const $CopyWithPlaceholder()
           ? _value.dislikes
           // ignore: cast_nullable_to_non_nullable
@@ -125,7 +126,7 @@ class _$PreferencesInputCWProxyImpl implements _$PreferencesInputCWProxy {
       cuisines: cuisines == const $CopyWithPlaceholder()
           ? _value.cuisines
           // ignore: cast_nullable_to_non_nullable
-          : cuisines as Set<String>,
+          : cuisines as Set<CuisineTag>,
       budgetBand: budgetBand == const $CopyWithPlaceholder()
           ? _value.budgetBand
           // ignore: cast_nullable_to_non_nullable
@@ -181,11 +182,15 @@ PreferencesInput _$PreferencesInputFromJson(Map<String, dynamic> json) =>
           ),
           allergyIds: $checkedConvert(
             'allergy_ids',
-            (v) => (v as List<dynamic>).map((e) => e as String).toSet(),
+            (v) => (v as List<dynamic>)
+                .map((e) => $enumDecode(_$AllergyTagEnumMap, e))
+                .toSet(),
           ),
           exclusionIds: $checkedConvert(
             'exclusion_ids',
-            (v) => (v as List<dynamic>).map((e) => e as String).toSet(),
+            (v) => (v as List<dynamic>)
+                .map((e) => $enumDecode(_$ExclusionTagEnumMap, e))
+                .toSet(),
           ),
           dislikes: $checkedConvert(
             'dislikes',
@@ -193,7 +198,9 @@ PreferencesInput _$PreferencesInputFromJson(Map<String, dynamic> json) =>
           ),
           cuisines: $checkedConvert(
             'cuisines',
-            (v) => (v as List<dynamic>).map((e) => e as String).toSet(),
+            (v) => (v as List<dynamic>)
+                .map((e) => $enumDecode(_$CuisineTagEnumMap, e))
+                .toSet(),
           ),
           budgetBand: $checkedConvert(
             'budget_band',
@@ -221,24 +228,62 @@ PreferencesInput _$PreferencesInputFromJson(Map<String, dynamic> json) =>
       },
     );
 
-Map<String, dynamic> _$PreferencesInputToJson(PreferencesInput instance) =>
-    <String, dynamic>{
-      'expected_revision': instance.expectedRevision,
-      'diet_type': _$DietTypeEnumMap[instance.dietType]!,
-      'allergy_ids': instance.allergyIds.toList(),
-      'exclusion_ids': instance.exclusionIds.toList(),
-      'dislikes': ?instance.dislikes?.toList(),
-      'cuisines': instance.cuisines.toList(),
-      'budget_band': _$BudgetBandEnumMap[instance.budgetBand]!,
-      'cooking_time': _$CookingTimeEnumMap[instance.cookingTime]!,
-      'meals_per_day': instance.mealsPerDay,
-    };
+Map<String, dynamic> _$PreferencesInputToJson(
+  PreferencesInput instance,
+) => <String, dynamic>{
+  'expected_revision': instance.expectedRevision,
+  'diet_type': _$DietTypeEnumMap[instance.dietType]!,
+  'allergy_ids': instance.allergyIds
+      .map((e) => _$AllergyTagEnumMap[e]!)
+      .toList(),
+  'exclusion_ids': instance.exclusionIds
+      .map((e) => _$ExclusionTagEnumMap[e]!)
+      .toList(),
+  'dislikes': ?instance.dislikes?.toList(),
+  'cuisines': instance.cuisines.map((e) => _$CuisineTagEnumMap[e]!).toList(),
+  'budget_band': _$BudgetBandEnumMap[instance.budgetBand]!,
+  'cooking_time': _$CookingTimeEnumMap[instance.cookingTime]!,
+  'meals_per_day': instance.mealsPerDay,
+};
 
 const _$DietTypeEnumMap = {
   DietType.vegetarian: 'vegetarian',
   DietType.eggatarian: 'eggatarian',
   DietType.vegan: 'vegan',
   DietType.nonVegetarian: 'non_vegetarian',
+};
+
+const _$AllergyTagEnumMap = {
+  AllergyTag.gluten: 'gluten',
+  AllergyTag.crustacean: 'crustacean',
+  AllergyTag.milk: 'milk',
+  AllergyTag.egg: 'egg',
+  AllergyTag.fish: 'fish',
+  AllergyTag.peanut: 'peanut',
+  AllergyTag.treeNut: 'tree_nut',
+  AllergyTag.soy: 'soy',
+  AllergyTag.sesame: 'sesame',
+};
+
+const _$ExclusionTagEnumMap = {
+  ExclusionTag.beef: 'beef',
+  ExclusionTag.pork: 'pork',
+  ExclusionTag.mutton: 'mutton',
+  ExclusionTag.chicken: 'chicken',
+  ExclusionTag.seafood: 'seafood',
+  ExclusionTag.onionGarlic: 'onion_garlic',
+  ExclusionTag.rootVegetables: 'root_vegetables',
+  ExclusionTag.mushroom: 'mushroom',
+  ExclusionTag.alcohol: 'alcohol',
+};
+
+const _$CuisineTagEnumMap = {
+  CuisineTag.northIndian: 'north_indian',
+  CuisineTag.southIndian: 'south_indian',
+  CuisineTag.eastIndian: 'east_indian',
+  CuisineTag.westIndian: 'west_indian',
+  CuisineTag.indoChinese: 'indo_chinese',
+  CuisineTag.continental: 'continental',
 };
 
 const _$BudgetBandEnumMap = {

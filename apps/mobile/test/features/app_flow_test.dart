@@ -130,12 +130,12 @@ void main() {
     await pumpNoura(tester, auth: auth, profiles: profiles);
 
     expect(find.text("You're offline"), findsOneWidget);
-    expect(profiles.calls, 1, reason: 'no silent automatic retries');
+    expect(profiles.loads, 1, reason: 'no silent automatic retries');
 
     profiles.error = null;
     await tester.tap(find.text('Try again'));
     await settle(tester);
-    expect(profiles.calls, 2);
+    expect(profiles.loads, 2);
     expect(find.byType(NavigationBar), findsOneWidget);
   });
 

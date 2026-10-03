@@ -17,6 +17,7 @@ import '../features/onboarding/onboarding_screen.dart';
 import '../features/progress/progress_screen.dart';
 import '../features/session/session_error_screen.dart';
 import '../features/session/splash_screen.dart';
+import '../features/settings/profile_settings_pages.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/workouts/workout_screen.dart';
 import 'route_guard.dart';
@@ -61,7 +62,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.updatePassword, builder: (_, _) => const UpdatePasswordScreen()),
       GoRoute(path: Routes.onboarding, builder: (_, _) => const OnboardingScreen()),
       GoRoute(path: Routes.sessionError, builder: (_, _) => const SessionErrorScreen()),
-      GoRoute(path: Routes.settings, builder: (_, _) => const SettingsScreen()),
+      GoRoute(
+        path: Routes.settings,
+        builder: (_, _) => const SettingsScreen(),
+        routes: [
+          GoRoute(path: 'profile', builder: (_, _) => const ProfileEditPage()),
+          GoRoute(path: 'goal', builder: (_, _) => const GoalEditPage()),
+          GoRoute(path: 'preferences', builder: (_, _) => const PreferencesEditPage()),
+          GoRoute(path: 'training', builder: (_, _) => const TrainingEditPage()),
+          GoRoute(path: 'eligibility', builder: (_, _) => const EligibilityEditPage()),
+        ],
+      ),
       StatefulShellRoute.indexedStack(
         builder: (_, _, shell) => AppShell(navigationShell: shell),
         branches: [

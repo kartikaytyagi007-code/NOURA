@@ -10,6 +10,11 @@ abstract final class Routes {
   static const onboarding = '/onboarding';
   static const sessionError = '/session-error';
   static const settings = '/settings';
+  static const settingsProfile = '/settings/profile';
+  static const settingsGoal = '/settings/goal';
+  static const settingsPreferences = '/settings/preferences';
+  static const settingsTraining = '/settings/training';
+  static const settingsEligibility = '/settings/eligibility';
 
   static const home = '/home';
   static const meals = '/meals';

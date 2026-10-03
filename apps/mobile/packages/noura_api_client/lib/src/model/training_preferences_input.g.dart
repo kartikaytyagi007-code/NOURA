@@ -13,7 +13,7 @@ abstract class _$TrainingPreferencesInputCWProxy {
 
   TrainingPreferencesInput location(TrainingLocation location);
 
-  TrainingPreferencesInput equipmentIds(Set<String> equipmentIds);
+  TrainingPreferencesInput equipmentIds(Set<EquipmentTag> equipmentIds);
 
   TrainingPreferencesInput weekdays(Set<int> weekdays);
 
@@ -21,7 +21,7 @@ abstract class _$TrainingPreferencesInputCWProxy {
 
   TrainingPreferencesInput durationMinutes(int durationMinutes);
 
-  TrainingPreferencesInput limitationTags(Set<String> limitationTags);
+  TrainingPreferencesInput limitationTags(Set<LimitationTag> limitationTags);
 
   /// This function **does support** nullification of nullable fields. All `null` values passed to `non-nullable` fields will be ignored. You can also use `TrainingPreferencesInput(...).copyWith.fieldName(...)` to override fields one at a time with nullification support.
   ///
@@ -33,11 +33,11 @@ abstract class _$TrainingPreferencesInputCWProxy {
     int expectedRevision,
     ExperienceLevel experience,
     TrainingLocation location,
-    Set<String> equipmentIds,
+    Set<EquipmentTag> equipmentIds,
     Set<int> weekdays,
     int daysPerWeek,
     int durationMinutes,
-    Set<String> limitationTags,
+    Set<LimitationTag> limitationTags,
   });
 }
 
@@ -61,7 +61,7 @@ class _$TrainingPreferencesInputCWProxyImpl
       this(location: location);
 
   @override
-  TrainingPreferencesInput equipmentIds(Set<String> equipmentIds) =>
+  TrainingPreferencesInput equipmentIds(Set<EquipmentTag> equipmentIds) =>
       this(equipmentIds: equipmentIds);
 
   @override
@@ -77,7 +77,7 @@ class _$TrainingPreferencesInputCWProxyImpl
       this(durationMinutes: durationMinutes);
 
   @override
-  TrainingPreferencesInput limitationTags(Set<String> limitationTags) =>
+  TrainingPreferencesInput limitationTags(Set<LimitationTag> limitationTags) =>
       this(limitationTags: limitationTags);
 
   @override
@@ -113,7 +113,7 @@ class _$TrainingPreferencesInputCWProxyImpl
       equipmentIds: equipmentIds == const $CopyWithPlaceholder()
           ? _value.equipmentIds
           // ignore: cast_nullable_to_non_nullable
-          : equipmentIds as Set<String>,
+          : equipmentIds as Set<EquipmentTag>,
       weekdays: weekdays == const $CopyWithPlaceholder()
           ? _value.weekdays
           // ignore: cast_nullable_to_non_nullable
@@ -129,7 +129,7 @@ class _$TrainingPreferencesInputCWProxyImpl
       limitationTags: limitationTags == const $CopyWithPlaceholder()
           ? _value.limitationTags
           // ignore: cast_nullable_to_non_nullable
-          : limitationTags as Set<String>,
+          : limitationTags as Set<LimitationTag>,
     );
   }
 }
@@ -179,7 +179,9 @@ TrainingPreferencesInput _$TrainingPreferencesInputFromJson(
       ),
       equipmentIds: $checkedConvert(
         'equipment_ids',
-        (v) => (v as List<dynamic>).map((e) => e as String).toSet(),
+        (v) => (v as List<dynamic>)
+            .map((e) => $enumDecode(_$EquipmentTagEnumMap, e))
+            .toSet(),
       ),
       weekdays: $checkedConvert(
         'weekdays',
@@ -192,7 +194,9 @@ TrainingPreferencesInput _$TrainingPreferencesInputFromJson(
       ),
       limitationTags: $checkedConvert(
         'limitation_tags',
-        (v) => (v as List<dynamic>).map((e) => e as String).toSet(),
+        (v) => (v as List<dynamic>)
+            .map((e) => $enumDecode(_$LimitationTagEnumMap, e))
+            .toSet(),
       ),
     );
     return val;
@@ -212,11 +216,15 @@ Map<String, dynamic> _$TrainingPreferencesInputToJson(
   'expected_revision': instance.expectedRevision,
   'experience': _$ExperienceLevelEnumMap[instance.experience]!,
   'location': _$TrainingLocationEnumMap[instance.location]!,
-  'equipment_ids': instance.equipmentIds.toList(),
+  'equipment_ids': instance.equipmentIds
+      .map((e) => _$EquipmentTagEnumMap[e]!)
+      .toList(),
   'weekdays': instance.weekdays.toList(),
   'days_per_week': instance.daysPerWeek,
   'duration_minutes': instance.durationMinutes,
-  'limitation_tags': instance.limitationTags.toList(),
+  'limitation_tags': instance.limitationTags
+      .map((e) => _$LimitationTagEnumMap[e]!)
+      .toList(),
 };
 
 const _$ExperienceLevelEnumMap = {
@@ -229,4 +237,25 @@ const _$TrainingLocationEnumMap = {
   TrainingLocation.home: 'home',
   TrainingLocation.gym: 'gym',
   TrainingLocation.both: 'both',
+};
+
+const _$EquipmentTagEnumMap = {
+  EquipmentTag.bodyweight: 'bodyweight',
+  EquipmentTag.dumbbells: 'dumbbells',
+  EquipmentTag.barbell: 'barbell',
+  EquipmentTag.kettlebell: 'kettlebell',
+  EquipmentTag.resistanceBands: 'resistance_bands',
+  EquipmentTag.bench: 'bench',
+  EquipmentTag.pullUpBar: 'pull_up_bar',
+  EquipmentTag.machines: 'machines',
+};
+
+const _$LimitationTagEnumMap = {
+  LimitationTag.knee: 'knee',
+  LimitationTag.lowerBack: 'lower_back',
+  LimitationTag.shoulder: 'shoulder',
+  LimitationTag.neck: 'neck',
+  LimitationTag.wristElbow: 'wrist_elbow',
+  LimitationTag.hip: 'hip',
+  LimitationTag.ankleFoot: 'ankle_foot',
 };
